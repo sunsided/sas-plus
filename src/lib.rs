@@ -133,6 +133,7 @@ pub struct Task {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum TaskError {
     InitialStateArity,
     ValueOutOfRange {
@@ -163,7 +164,8 @@ pub enum TaskError {
     AxiomHeadNotDerived {
         axiom: usize,
     },
-    /// An axiom depends on a derived variable of a higher layer.
+    /// An axiom depends on a derived variable of a higher layer, or on one of
+    /// its own layer being at its default (negation needs a lower layer).
     AxiomLayer {
         axiom: usize,
     },
@@ -272,11 +274,11 @@ impl Task {
             let Some(layer) = self.variables[axiom.head.var].axiom_layer else {
                 return Err(TaskError::AxiomHeadNotDerived { axiom: id });
             };
-            if axiom
-                .conditions
-                .iter()
-                .any(|c| self.variables[c.var].axiom_layer.is_some_and(|l| l > layer))
-            {
+            if axiom.conditions.iter().any(|c| {
+                self.variables[c.var]
+                    .axiom_layer
+                    .is_some_and(|l| l > layer || (l == layer && c.value == self.initial.0[c.var]))
+            }) {
                 return Err(TaskError::AxiomLayer { axiom: id });
             }
         }

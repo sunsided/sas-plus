@@ -111,6 +111,18 @@ fn validate_reports_each_kind_of_error() {
     t.axioms[0].conditions.push(Fact::new(3, 0));
     assert_eq!(t.validate(), Err(TaskError::AxiomLayer { axiom: 0 }));
 
+    // Negation within one layer: c = 1 ← c2 = 0 with c2 in c's layer.
+    let mut t = tiny_derived();
+    t.variables.push(Variable {
+        axiom_layer: Some(0),
+        ..Variable::new("c2", 2)
+    });
+    t.initial.0.push(0);
+    t.axioms[0].conditions.push(Fact::new(3, 0));
+    assert_eq!(t.validate(), Err(TaskError::AxiomLayer { axiom: 0 }));
+    // A positive condition on the same layer is fine.
+    t.axioms[0].conditions[1] = Fact::new(3, 1);
+    assert_eq!(t.validate(), Ok(()));
 }
 
 #[test]
