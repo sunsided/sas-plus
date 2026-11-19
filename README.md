@@ -59,7 +59,7 @@ To try both steps with Docker and [Task](https://taskfile.dev), run `task ground
 Use `default-features = false` if you only need the task model.
 
 ## Fixtures
-- `tests/fixtures/translated/`: real Fast Downward translator output for eight problems, from the VHPOP and Potoroo corpora plus two written for this repo. It covers unit costs, action costs, conditional effects and derived predicates. Every file round-trips byte for byte, and the small tasks are checked against their known optima. The folder includes GPL-2.0 / Apache-2.0 test inputs and is excluded from the published crate.
+- `tests/fixtures/translated/`: real Fast Downward translator output for nine problems, from the VHPOP and Potoroo corpora plus three written for this repo. It covers unit costs, action costs, conditional effects and derived predicates. Every file round-trips byte for byte, and the small tasks are checked against their known optima. The folder includes GPL-2.0 / Apache-2.0 test inputs and is excluded from the published crate.
 - `tests/fixtures/`: small hand-encoded files, including a minimal axiom (derived-variable) example.
 
 ## Testing
