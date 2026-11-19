@@ -311,29 +311,36 @@ impl Task {
     /// [`Task::initial`]), then the axioms fire layer by layer until nothing
     /// changes, as in Fast Downward. A variable keeps the first non-default
     /// value derived for it.
+    ///
+    /// This allocates nothing but rescans the rules of a layer until none
+    /// fires; search code that needs speed on axiom-heavy tasks should index
+    /// the rules itself.
     pub fn evaluate_axioms(&self, state: &mut State) {
         if self.axioms.is_empty() {
             return;
         }
-        let mut layers: Vec<u32> = Vec::new();
         for (var, v) in self.variables.iter().enumerate() {
-            if let Some(layer) = v.axiom_layer {
+            if v.is_derived() {
                 state.0[var] = self.initial.0[var];
-                layers.push(layer);
             }
         }
-        layers.sort_unstable();
-        layers.dedup();
-        for layer in layers {
-            let rules: Vec<&Axiom> = self
-                .axioms
-                .iter()
-                .filter(|a| self.variables[a.head.var].axiom_layer == Some(layer))
-                .collect();
+        let mut done: Option<u32> = None;
+        // Layers in ascending order, without collecting them.
+        while let Some(layer) = self
+            .variables
+            .iter()
+            .filter_map(|v| v.axiom_layer)
+            .filter(|&l| done.is_none_or(|d| l > d))
+            .min()
+        {
+            done = Some(layer);
             let mut changed = true;
             while changed {
                 changed = false;
-                for a in &rules {
+                for a in &self.axioms {
+                    if self.variables[a.head.var].axiom_layer != Some(layer) {
+                        continue;
+                    }
                     // Only a variable still at its default is derived, so the fixpoint is reached.
                     let default = self.initial.0[a.head.var];
                     if state.0[a.head.var] == default
@@ -392,25 +399,23 @@ impl Task {
             .collect();
         let ranking = ranking::Ranking::new(self, vars);
         let mut state = self.initial.clone();
-        let mut set = |index: usize| {
-            ranking.unrank(index, &mut state);
-            self.evaluate_axioms(&mut state);
-            state.clone()
-        };
         let mut transitions = Vec::new();
         for (label, op) in self.operators.iter().enumerate() {
             // Preconditions on state variables pick the candidates; derived ones are checked after.
             for src in ranking.matching(&op.pre) {
-                let s = set(src);
-                if self.is_applicable(label, &s) {
-                    let dst = ranking.rank(&self.apply(label, &s));
+                ranking.unrank(src, &mut state);
+                self.evaluate_axioms(&mut state);
+                if self.is_applicable(label, &state) {
+                    let dst = ranking.rank(&self.apply(label, &state));
                     transitions.push(Transition { src, label, dst });
                 }
             }
         }
         let mut goal = vec![false; ranking.num_states];
         for index in ranking.matching(&self.goal) {
-            goal[index] = self.is_goal(&set(index));
+            ranking.unrank(index, &mut state);
+            self.evaluate_axioms(&mut state);
+            goal[index] = self.is_goal(&state);
         }
         let lts = LabeledTransitionSystem {
             num_states: ranking.num_states,
