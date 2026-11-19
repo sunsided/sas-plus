@@ -51,6 +51,11 @@ tasks:
     cmds:
       - cargo test --all-features {{.CLI_ARGS}}
 
+  bench:
+    desc: Run the benchmarks (parsing, projections, perfect heuristic)
+    cmds:
+      - cargo bench --bench construction {{.CLI_ARGS}}
+
   fuzz:
     desc: Fuzz the output.sas reader (needs nightly and cargo-fuzz); default 5 minutes
     dir: fuzz

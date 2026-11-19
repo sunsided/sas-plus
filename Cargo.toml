@@ -10,7 +10,7 @@ readme = "README.md"
 keywords = ["planning", "sas", "pddl", "fast-downward", "heuristic"]
 categories = ["algorithms", "science", "no-std"]
 # GPL-2.0 / Apache-2.0 test inputs; see tests/fixtures/translated/README.md
-exclude = ["tests/fixtures/translated", "tests/translated.rs", "fuzz"]
+exclude = ["tests/fixtures/translated", "tests/translated.rs", "benches", "fuzz"]
 
 [features]
 default = ["fdr", "random"]
@@ -23,6 +23,14 @@ serde = ["dep:serde"]
 
 [dependencies]
 serde = { version = "1.0.200", default-features = false, features = ["alloc", "derive"], optional = true }
+
+[dev-dependencies]
+criterion = { version = "0.8", default-features = false }
+
+[[bench]]
+name = "construction"
+harness = false
+required-features = ["fdr"]
 
 [[example]]
 name = "load"
