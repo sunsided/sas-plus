@@ -1,3 +1,6 @@
+use alloc::vec;
+use alloc::vec::Vec;
+
 use crate::{Abstraction, LabeledTransitionSystem, State, Task, Transition, VarId};
 
 /// Projection of a task onto a subset of variables (a "pattern"); the

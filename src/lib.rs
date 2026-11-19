@@ -8,6 +8,10 @@
 //! Tasks come from Fast Downward's translator via [`fdr::SasFile`] (the
 //! `output.sas` format), from your own grounder, or from [`random`] for tests.
 
+#![no_std]
+
+extern crate alloc;
+
 pub mod fdr;
 mod lts;
 mod projection;
@@ -16,7 +20,9 @@ pub mod random;
 pub use lts::{LabeledTransitionSystem, Transition};
 pub use projection::Projection;
 
-use std::fmt;
+use alloc::string::String;
+use alloc::vec::Vec;
+use core::fmt;
 
 pub type VarId = usize;
 pub type Value = u32;
@@ -82,7 +88,7 @@ impl fmt::Display for TaskError {
     }
 }
 
-impl std::error::Error for TaskError {}
+impl core::error::Error for TaskError {}
 
 /// Something that maps concrete states onto an abstract transition system
 /// whose labels are operator ids. Goal distances in the abstract system are

@@ -14,8 +14,11 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
-use std::fmt::{self, Write as _};
-use std::str::FromStr;
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+use core::fmt::{self, Write as _};
+use core::str::FromStr;
 
 use crate::{Fact, OpId, Operator, State, Task, Value, VarId, Variable};
 
@@ -85,7 +88,7 @@ impl fmt::Display for ParseError {
     }
 }
 
-impl std::error::Error for ParseError {}
+impl core::error::Error for ParseError {}
 
 /// Why a [`SasFile`] cannot be represented as a plain [`Task`].
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -107,7 +110,7 @@ impl fmt::Display for ConversionError {
     }
 }
 
-impl std::error::Error for ConversionError {}
+impl core::error::Error for ConversionError {}
 
 impl SasFile {
     pub fn parse(text: &str) -> Result<Self, ParseError> {
@@ -269,7 +272,7 @@ fn write_facts(f: &mut fmt::Formatter<'_>, facts: &[Fact]) -> fmt::Result {
 }
 
 struct Parser<'a> {
-    lines: std::str::Lines<'a>,
+    lines: core::str::Lines<'a>,
     line: usize,
     /// Domain sizes of the variables read so far, for range checks.
     domains: Vec<u32>,

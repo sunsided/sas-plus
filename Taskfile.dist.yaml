@@ -51,9 +51,18 @@ tasks:
     cmds:
       - cargo test --all-features {{.CLI_ARGS}}
 
+  build:no-std:
+    desc: Build the library for a bare-metal target without std
+    preconditions:
+      - sh: rustup target list --installed | grep -q thumbv7em-none-eabihf
+        msg: "target missing — rustup target add thumbv7em-none-eabihf"
+    cmds:
+      - cargo build --lib --target thumbv7em-none-eabihf
+
   ci:
     desc: Run what CI runs
     cmds:
       - task: fmt
       - task: lint
       - task: test
+      - task: build:no-std

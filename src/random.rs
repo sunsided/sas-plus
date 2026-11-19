@@ -1,6 +1,9 @@
 //! Tiny deterministic random task generator for property tests across the
 //! workspace (no external RNG dependency).
 
+use alloc::format;
+use alloc::vec::Vec;
+
 use crate::{Fact, Operator, State, Task, Variable};
 
 /// xorshift64* — good enough for test-case generation.

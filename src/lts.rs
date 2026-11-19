@@ -1,5 +1,7 @@
-use std::cmp::Reverse;
-use std::collections::BinaryHeap;
+use alloc::collections::BinaryHeap;
+use alloc::vec;
+use alloc::vec::Vec;
+use core::cmp::Reverse;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Transition {
