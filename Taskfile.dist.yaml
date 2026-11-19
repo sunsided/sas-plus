@@ -51,6 +51,17 @@ tasks:
     cmds:
       - cargo test --all-features {{.CLI_ARGS}}
 
+  fuzz:
+    desc: Fuzz the output.sas reader (needs nightly and cargo-fuzz); default 5 minutes
+    dir: fuzz
+    preconditions:
+      - sh: cargo +nightly fuzz --version >/dev/null 2>&1
+        msg: "cargo-fuzz missing — cargo install cargo-fuzz; rustup toolchain install nightly"
+    cmds:
+      - mkdir -p corpus/parse
+      - for f in ../tests/fixtures/*/output.sas ../tests/fixtures/translated/*/output.sas; do cp "$f" "corpus/parse/$(basename "$(dirname "$f")").sas"; done
+      - cargo +nightly fuzz run parse corpus/parse -- -max_total_time={{.SECONDS | default 300}} -max_len=8192
+
   build:no-std:
     desc: Build the library for a bare-metal target without std
     preconditions:
