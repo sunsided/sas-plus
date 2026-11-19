@@ -20,9 +20,12 @@ impl Rng {
         self.0 ^= self.0 >> 27;
         self.0.wrapping_mul(0x2545_F491_4F6C_DD1D)
     }
-    /// Uniform in `lo..=hi`.
+    /// Uniform in `lo..=hi`. Panics if `lo > hi`.
     pub fn range(&mut self, lo: u64, hi: u64) -> u64 {
-        lo + self.next_u64() % (hi - lo + 1)
+        assert!(lo <= hi, "empty range {lo}..={hi}");
+        let x = self.next_u64();
+        // The full `u64` range has no modulus that fits.
+        (hi - lo).checked_add(1).map_or(x, |n| lo + x % n)
     }
     fn distinct_vars(&mut self, n: usize, k: usize) -> Vec<usize> {
         let mut vars: Vec<usize> = (0..n).collect();

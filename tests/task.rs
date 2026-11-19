@@ -2,8 +2,8 @@
 
 use sas_plus::random::{RandomTaskParams, Rng, random_task};
 use sas_plus::{
-    Abstraction, Axiom, CausalGraph, Effect, Fact, Operator, Projection, State, Task, TaskError,
-    Variable,
+    Abstraction, Axiom, CausalGraph, Effect, Fact, LabeledTransitionSystem, Operator, Projection,
+    State, Task, TaskError, Transition, Variable,
 };
 
 fn tiny() -> Task {
@@ -275,4 +275,50 @@ fn projections_handle_many_uncertain_effects() {
     assert_eq!(from_0, [0, 1, 2]);
     // From x = 1 or x = 2 only the other non-zero value is new.
     assert_eq!(p.lts().transitions.len(), 7);
+}
+
+#[test]
+fn init_distances_follow_transitions_forward() {
+    let t = |src, label, dst| Transition { src, label, dst };
+    let lts = LabeledTransitionSystem {
+        num_states: 4,
+        num_labels: 2,
+        transitions: vec![t(0, 0, 1), t(1, 1, 2), t(3, 0, 0)],
+        goal: vec![false, false, true, false],
+        initial: Some(0),
+    };
+    assert_eq!(
+        lts.init_distances(&[2, 5]),
+        [Some(0), Some(2), Some(7), None]
+    );
+    assert_eq!(
+        lts.goal_distances(&[2, 5]),
+        [Some(7), Some(5), Some(0), Some(9)]
+    );
+}
+
+#[test]
+fn distances_saturate_instead_of_wrapping() {
+    let t = |src, label, dst| Transition { src, label, dst };
+    let lts = LabeledTransitionSystem {
+        num_states: 3,
+        num_labels: 2,
+        transitions: vec![t(0, 0, 1), t(1, 1, 2)],
+        goal: vec![false, false, true],
+        initial: Some(0),
+    };
+    assert_eq!(lts.goal_distances(&[1, u64::MAX])[0], Some(u64::MAX));
+}
+
+#[test]
+fn rng_range_covers_the_full_domain() {
+    let mut rng = Rng::new(1);
+    rng.range(0, u64::MAX);
+    assert_eq!(rng.range(7, 7), 7);
+}
+
+#[test]
+#[should_panic(expected = "empty range")]
+fn rng_range_rejects_empty_ranges() {
+    Rng::new(1).range(5, 3);
 }

@@ -77,7 +77,8 @@ fn dijkstra(
             continue;
         }
         for &(t, c) in &adj[s] {
-            let nd = d + c;
+            // Saturate, so an "infinite" cost of u64::MAX cannot wrap to a short path.
+            let nd = d.saturating_add(c);
             if dist[t].is_none_or(|old| nd < old) {
                 dist[t] = Some(nd);
                 heap.push(Reverse((nd, t)));
