@@ -1,0 +1,59 @@
+version: '3'
+
+vars:
+  # Any task from tests/fixtures/translated/ works; override with
+  # `task ground DOMAIN=... PROBLEM=...`.
+  DOMAIN: '{{ .DOMAIN | default "tests/fixtures/translated/gripper-costs/domain.pddl" }}'
+  PROBLEM: '{{ .PROBLEM | default "tests/fixtures/translated/gripper-costs/problem.pddl" }}'
+  SAS_FILE: '{{ .SAS_FILE | default "target/ground/output.sas" }}'
+
+tasks:
+  default:
+    cmds:
+      - task --list --sort=none
+    silent: true
+
+  ground:
+    desc: Ground PDDL into output.sas with Fast Downward's translator (Docker)
+    preconditions:
+      - sh: command -v docker
+        msg: "docker not found — install from https://docker.com"
+      - sh: docker info >/dev/null 2>&1
+        msg: "docker daemon not running — start Docker Desktop or dockerd"
+    sources: ['{{.DOMAIN}}', '{{.PROBLEM}}']
+    generates: ['{{.SAS_FILE}}']
+    cmds:
+      - mkdir -p "$(dirname '{{.SAS_FILE}}')"
+      # Paths must lie inside the repository, which is mounted at /work.
+      - >-
+        docker run --rm -u "$(id -u):$(id -g)" -v "$PWD:/work" -w /work
+        aibasel/downward --sas-file '{{.SAS_FILE}}'
+        --translate '{{.DOMAIN}}' '{{.PROBLEM}}'
+
+  ground:load:
+    desc: Ground PDDL, then load output.sas in Rust and print its optimal cost
+    deps: [ground]
+    cmds:
+      - cargo run --quiet --example load -- '{{.SAS_FILE}}'
+
+  fmt:
+    desc: Check formatting
+    cmds:
+      - cargo fmt --all --check
+
+  lint:
+    desc: Run clippy
+    cmds:
+      - cargo clippy --all-targets --all-features -- -D warnings
+
+  test:
+    desc: Run the test suite
+    cmds:
+      - cargo test --all-features {{.CLI_ARGS}}
+
+  ci:
+    desc: Run what CI runs
+    cmds:
+      - task: fmt
+      - task: lint
+      - task: test

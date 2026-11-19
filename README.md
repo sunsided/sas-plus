@@ -26,6 +26,8 @@ let task = file.to_task()?;              // plain SAS+ task
 print!("{}", file.format_plan(&plan));   // sas_plan format, ready for VAL
 ```
 
+To try both steps with Docker and [Task](https://taskfile.dev), run `task ground:load`. It grounds a fixture with the `aibasel/downward` image and loads the result with `examples/load.rs`. Pass `DOMAIN=... PROBLEM=...` to ground your own PDDL (paths inside the repository).
+
 ## What's in it
 - **`fdr`**: reader and writer for `output.sas` (file version 3).
   - Faithful to the format: mutex groups, conditional effects, axioms, and fact names are all kept.
