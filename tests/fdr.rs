@@ -88,6 +88,16 @@ fn format_plan_matches_fast_downward() {
     );
 }
 
+/// Fast Downward writes "unit cost" whenever every operator costs 1, even
+/// with metric 1 (checked against its search on such a file).
+#[test]
+fn format_plan_labels_unit_costs_by_the_costs() {
+    let text = fixture("gripper-costs").replace("\n3\nend_operator", "\n1\nend_operator");
+    let file = SasFile::parse(&text).unwrap();
+    assert!(file.use_metric);
+    assert_eq!(file.format_plan(&[]), "; cost = 0 (unit cost)\n");
+}
+
 #[test]
 fn rejects_features_plain_tasks_cannot_express() {
     let cond = SasFile::parse(&fixture("conditional-effects")).unwrap();
@@ -135,7 +145,11 @@ fn reports_errors_with_line_numbers() {
             0,
             "end of file",
         ),
-        (format!("{text}junk\n"), 0, "unexpected content"),
+        (
+            format!("{text}\n\njunk\n"),
+            text.lines().count() + 3,
+            "unexpected content",
+        ),
     ];
     for (input, line, needle) in cases {
         let err = SasFile::parse(&input).expect_err(needle);

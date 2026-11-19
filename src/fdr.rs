@@ -197,11 +197,9 @@ impl SasFile {
             .iter()
             .map(|&op| u64::from(self.operator_cost(op)))
             .sum();
-        let kind = if self.use_metric {
-            "general cost"
-        } else {
-            "unit cost"
-        };
+        // Fast Downward labels by the costs themselves, not by the metric flag.
+        let unit = (0..self.operators.len()).all(|op| self.operator_cost(op) == 1);
+        let kind = if unit { "unit cost" } else { "general cost" };
         let _ = writeln!(out, "; cost = {cost} ({kind})");
         out
     }
@@ -413,11 +411,13 @@ impl<'a> Parser<'a> {
             .map(|_| self.axiom())
             .collect::<Result<_, _>>()?;
 
-        if let Some(extra) = self.lines.by_ref().find(|l| !l.trim().is_empty()) {
+        while let Some(extra) = self.lines.next() {
             self.line += 1;
-            return self.error(format!(
-                "unexpected content after the last axiom: `{extra}`"
-            ));
+            if !extra.trim().is_empty() {
+                return self.error(format!(
+                    "unexpected content after the last axiom: `{extra}`"
+                ));
+            }
         }
         Ok(SasFile {
             use_metric,
