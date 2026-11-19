@@ -5,8 +5,10 @@
 //! describes planning tasks with finite-domain state variables, operators
 //! with preconditions and effects, and partial goals.
 //!
-//! Use [`random`] to generate small tasks for property tests.
+//! Tasks come from Fast Downward's translator via [`fdr::SasFile`] (the
+//! `output.sas` format), from your own grounder, or from [`random`] for tests.
 
+pub mod fdr;
 mod lts;
 mod projection;
 pub mod random;
