@@ -1,0 +1,11 @@
+[package]
+name = "sas-plus"
+description = "Minimal SAS+ planning task representation, labeled transition systems and abstractions"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+rust-version = "1.85"
+repository = "https://github.com/sunsided/sas-plus"
+readme = "README.md"
+
+[dependencies]
