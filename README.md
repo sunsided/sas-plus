@@ -46,7 +46,7 @@ To try both steps with Docker and [Task](https://taskfile.dev), run `task ground
   - `to_task()` converts to a plain `Task` and rejects conditional effects and axioms with a typed error.
   - Metric `0` means unit costs, exactly as in Fast Downward's search.
 - **`Task`, `Operator`, `Fact`, `State`**, with validation, applicability and plan checking.
-- **`LabeledTransitionSystem`** and the **`Abstraction` trait** shared by [`merge-and-shrink`](https://github.com/sunsided/merge-and-shrink) and [`cost-partition`](https://github.com/sunsided/cost-partition).
+- **`LabeledTransitionSystem`** and the **`Abstraction` trait**, the common interface for abstraction heuristics such as projections, merge-and-shrink, and cost partitioning over them.
 - **`Projection`**: the pattern-database abstraction.
 - **Test oracles**: `Task::perfect_heuristic()` (exact h\*) and `random::random_task`.
 

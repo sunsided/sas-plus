@@ -1,5 +1,5 @@
 //! Minimal SAS+ planning tasks, labeled transition systems, and the
-//! [`Abstraction`] trait shared by `merge-and-shrink` and `cost-partition`.
+//! [`Abstraction`] trait for abstraction heuristics.
 //!
 //! SAS+ (*Simplified Action Structures*, extended; Bäckström & Nebel 1995)
 //! describes planning tasks with finite-domain state variables, operators
