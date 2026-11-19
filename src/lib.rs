@@ -193,7 +193,10 @@ impl fmt::Display for TaskError {
                 write!(f, "axiom {axiom} sets a state variable")
             }
             Self::AxiomLayer { axiom } => {
-                write!(f, "axiom {axiom} depends on a higher axiom layer")
+                write!(
+                    f,
+                    "axiom {axiom} depends on a higher axiom layer or negates its own layer"
+                )
             }
         }
     }

@@ -76,6 +76,9 @@ pub struct SasEffect {
 pub struct SasAxiom {
     pub conditions: Vec<Fact>,
     pub var: VarId,
+    /// Must equal the derived variable's value in [`SasFile::initial`] (its
+    /// default); the reader rejects files where it does not, and
+    /// [`SasFile::to_task`] drops it.
     pub pre: Value,
     pub post: Value,
 }
