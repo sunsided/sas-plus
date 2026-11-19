@@ -4,6 +4,7 @@ use alloc::vec::Vec;
 use core::cmp::Reverse;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Transition {
     pub src: usize,
     pub label: usize,
@@ -13,7 +14,8 @@ pub struct Transition {
 /// An explicit labeled transition system. Self-loops are kept: they matter
 /// for synchronized products (merge-and-shrink), and are ignored where they
 /// are irrelevant (distances, saturated costs).
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct LabeledTransitionSystem {
     pub num_states: usize,
     pub num_labels: usize,

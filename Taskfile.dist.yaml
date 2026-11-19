@@ -51,6 +51,22 @@ tasks:
     cmds:
       - cargo test --all-features {{.CLI_ARGS}}
 
+  bench:
+    desc: Run the benchmarks (parsing, projections, perfect heuristic)
+    cmds:
+      - cargo bench --bench construction {{.CLI_ARGS}}
+
+  fuzz:
+    desc: Fuzz the output.sas reader (needs nightly and cargo-fuzz); default 5 minutes
+    dir: fuzz
+    preconditions:
+      - sh: cargo +nightly fuzz --version >/dev/null 2>&1
+        msg: "cargo-fuzz missing — cargo install cargo-fuzz; rustup toolchain install nightly"
+    cmds:
+      - mkdir -p corpus/parse
+      - for f in ../tests/fixtures/*/output.sas ../tests/fixtures/translated/*/output.sas; do cp "$f" "corpus/parse/$(basename "$(dirname "$f")").sas"; done
+      - cargo +nightly fuzz run parse corpus/parse -- -max_total_time={{.SECONDS | default 300}} -max_len=8192
+
   build:no-std:
     desc: Build the library for a bare-metal target without std
     preconditions:
@@ -58,6 +74,8 @@ tasks:
         msg: "target missing — rustup target add thumbv7em-none-eabihf"
     cmds:
       - cargo build --lib --target thumbv7em-none-eabihf
+      - cargo build --lib --target thumbv7em-none-eabihf --no-default-features
+      - cargo build --lib --target thumbv7em-none-eabihf --all-features
 
   build:msrv:
     desc: Build the library with the minimum supported Rust version (1.85)
@@ -65,7 +83,7 @@ tasks:
       - sh: rustup run 1.85 rustc --version >/dev/null 2>&1
         msg: "Rust 1.85 missing — rustup toolchain install 1.85"
     cmds:
-      - cargo +1.85 build --lib
+      - cargo +1.85 build --lib --all-features
 
   ci:
     desc: Run what CI runs

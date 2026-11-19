@@ -18,16 +18,18 @@ Each folder holds the PDDL input next to the output.
 | `logistics-e` | VHPOP `logistics-domain.pddl` | Potoroo `logistics-e.pddl` | 19 / 756 | not checked |
 | `gripper-costs` | own, action costs (move 3, pick/drop 1) | own | 5 / 18 | 7 |
 | `courier` | own, action costs **and** conditional effects | own | 9 / 18 | (conditional effects) |
+| `wiring` | own, action costs **and** derived predicates (axioms) | own | 9 (4 derived) / 5, 6 axioms | 4 |
 | `get-paid4` | VHPOP `briefcase-world-domain.pddl` (conditional effects) | VHPOP `get-paid4.pddl` | 20 / 44 | (conditional effects) |
 
 `gripper-costs` encodes the same task as the hand-written `../gripper-costs`, and the tests check that both have the same optimal cost.
-In `courier` and `get-paid4`, the translator keeps conditional effects on the operators that move a container (van, briefcase) along with its contents. `to_task()` rejects those tasks with `ConversionError::ConditionalEffect`.
+In `courier` and `get-paid4`, the translator keeps conditional effects on the operators that move a container (van, briefcase) along with its contents. `to_task()` keeps them as effect conditions; `courier` is small enough to check its optimum (16).
+In `wiring`, `powered` is a derived predicate (the transitive closure over laid cables), so the translator emits derived variables and axiom rules. It was grounded with the pinned `aibasel/downward` image via `task ground` (see `Taskfile.dist.yaml`).
 
 Optimal costs are verified by exhaustive search (`Task::perfect_heuristic`) in the tests.
 
 ## Provenance and licences
 
-`gripper-costs` and `courier` were written for this repository and fall under its licence (MIT OR Apache-2.0).
+`gripper-costs`, `courier` and `wiring` were written for this repository and fall under its licence (MIT OR Apache-2.0).
 
 All other PDDL files were copied unchanged from the test data of
 [sunsided/pddl-rs](https://github.com/sunsided/pddl-rs) (`tests/data/`):

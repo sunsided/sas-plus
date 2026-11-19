@@ -16,10 +16,12 @@ jobs:
       - run: cargo clippy --all-targets --all-features -- -D warnings
       - run: cargo test --all-features
       - run: cargo build --lib --target thumbv7em-none-eabihf
+      - run: cargo build --lib --target thumbv7em-none-eabihf --no-default-features
+      - run: cargo build --lib --target thumbv7em-none-eabihf --all-features
   msrv:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.85
       - uses: Swatinem/rust-cache@v2
-      - run: cargo build --lib
+      - run: cargo build --lib --all-features

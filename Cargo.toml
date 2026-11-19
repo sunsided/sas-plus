@@ -1,7 +1,7 @@
 [package]
 name = "sas-plus"
 description = "Minimal SAS+ planning task representation, labeled transition systems and abstractions"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 rust-version = "1.85"
@@ -10,6 +10,31 @@ readme = "README.md"
 keywords = ["planning", "sas", "pddl", "fast-downward", "heuristic"]
 categories = ["algorithms", "science", "no-std"]
 # GPL-2.0 / Apache-2.0 test inputs; see tests/fixtures/translated/README.md
-exclude = ["tests/fixtures/translated", "tests/translated.rs"]
+exclude = ["tests/fixtures/translated", "tests/translated.rs", "benches", "fuzz"]
+
+[features]
+default = ["fdr", "random"]
+## Reader and writer for Fast Downward's `output.sas` format.
+fdr = []
+## Deterministic random task generator for tests.
+random = []
+## Serialize and Deserialize for the task model, transition systems and SasFile.
+serde = ["dep:serde"]
 
 [dependencies]
+serde = { version = "1.0.200", default-features = false, features = ["alloc", "derive"], optional = true }
+
+[dev-dependencies]
+criterion = { version = "0.8", default-features = false }
+
+[[bench]]
+name = "construction"
+harness = false
+required-features = ["fdr"]
+
+[[example]]
+name = "load"
+required-features = ["fdr"]
+
+[package.metadata.docs.rs]
+all-features = true

@@ -1,12 +1,16 @@
 //! Real Fast Downward translator output (see tests/fixtures/translated/README.md).
 
-use sas_plus::fdr::{ConversionError, SasFile};
+#![cfg(feature = "fdr")]
 
-const SMALL: [(&str, u64); 4] = [
+use sas_plus::fdr::SasFile;
+
+const SMALL: [(&str, u64); 6] = [
     ("sussman-anomaly", 3),
     ("gripper-2", 3),
     ("gripper-4", 9),
     ("gripper-costs", 7),
+    ("courier", 16),
+    ("wiring", 4),
 ];
 /// Plain SAS+ tasks: no conditional effects, no axioms.
 const PLAIN: [&str; 6] = [
@@ -19,6 +23,8 @@ const PLAIN: [&str; 6] = [
 ];
 /// Tasks whose operators keep conditional effects after translation.
 const CONDITIONAL: [&str; 2] = ["courier", "get-paid4"];
+/// Tasks with derived variables and axioms.
+const DERIVED: [&str; 1] = ["wiring"];
 
 fn read(name: &str) -> String {
     let path = format!(
@@ -30,7 +36,7 @@ fn read(name: &str) -> String {
 
 #[test]
 fn translator_output_round_trips_byte_for_byte() {
-    for name in PLAIN.iter().chain(&CONDITIONAL) {
+    for name in PLAIN.iter().chain(&CONDITIONAL).chain(&DERIVED) {
         let text = read(name);
         let file = SasFile::parse(&text).unwrap_or_else(|e| panic!("{name}: {e}"));
         assert_eq!(file.to_string(), text, "{name}");
@@ -38,20 +44,19 @@ fn translator_output_round_trips_byte_for_byte() {
 }
 
 #[test]
-fn plain_tasks_convert_to_valid_tasks() {
-    for name in PLAIN {
+fn all_tasks_convert_to_valid_tasks() {
+    for name in PLAIN.iter().chain(&CONDITIONAL).chain(&DERIVED) {
         let file = SasFile::parse(&read(name)).unwrap();
         file.to_task()
-            .unwrap_or_else(|e| panic!("{name}: {e}"))
             .validate()
-            .unwrap();
+            .unwrap_or_else(|e| panic!("{name}: {e}"));
     }
 }
 
 #[test]
 fn small_tasks_have_their_known_optimal_cost() {
     for (name, optimum) in SMALL {
-        let task = SasFile::parse(&read(name)).unwrap().to_task().unwrap();
+        let task = SasFile::parse(&read(name)).unwrap().to_task();
         assert_eq!(
             task.perfect_heuristic()(&task.initial),
             Some(optimum),
@@ -97,9 +102,8 @@ fn action_costs_survive_translation() {
     );
     let hand = SasFile::parse(&std::fs::read_to_string(hand).unwrap())
         .unwrap()
-        .to_task()
-        .unwrap();
-    let translated = file.to_task().unwrap();
+        .to_task();
+    let translated = file.to_task();
     assert_eq!(
         hand.perfect_heuristic()(&hand.initial),
         translated.perfect_heuristic()(&translated.initial)
@@ -107,22 +111,25 @@ fn action_costs_survive_translation() {
 }
 
 #[test]
-fn conditional_effects_survive_translation_and_are_rejected_by_to_task() {
+fn conditional_effects_survive_translation_and_conversion() {
     for name in CONDITIONAL {
         let file = SasFile::parse(&read(name)).unwrap();
-        let conditional = file
+        let in_file = file
             .operators
             .iter()
-            .filter(|o| o.effects.iter().any(|e| !e.conditions.is_empty()))
+            .flat_map(|o| &o.effects)
+            .filter(|e| !e.conditions.is_empty())
             .count();
-        assert!(conditional > 0, "{name}: no effect conditions left");
-        assert!(
-            matches!(
-                file.to_task(),
-                Err(ConversionError::ConditionalEffect { .. })
-            ),
-            "{name}"
-        );
+        assert!(in_file > 0, "{name}: no effect conditions left");
+        let task = file.to_task();
+        task.validate().unwrap_or_else(|e| panic!("{name}: {e}"));
+        let in_task = task
+            .operators
+            .iter()
+            .flat_map(|o| &o.eff)
+            .filter(|e| !e.conditions.is_empty())
+            .count();
+        assert_eq!(in_file, in_task, "{name}");
     }
 }
 
@@ -153,4 +160,27 @@ fn courier_combines_action_costs_and_conditional_effects() {
         assert_eq!(conditions.len(), 4, "{name}: {conditions:?}");
     }
     assert_eq!(op("load parcel1 depot").cost, 1);
+}
+
+/// Wiring: `powered` is a derived predicate (transitive over cables), and
+/// laying a cable requires its end to be unpowered.
+#[test]
+fn derived_predicates_survive_translation() {
+    let file = SasFile::parse(&read("wiring")).unwrap();
+    assert!(file.use_metric);
+    assert!(!file.axioms.is_empty());
+    assert!(file.variables.iter().any(|v| v.axiom_layer.is_some()));
+    let task = file.to_task();
+    let id = |n: &str| task.operators.iter().position(|o| o.name == n).unwrap();
+    let via_junction = [
+        id("lay-cable plant junction"),
+        id("lay-cable junction lamp"),
+    ];
+    assert_eq!(task.validate_plan(&via_junction), Some(4));
+    // Once the lamp is powered, no more cables may lead into it.
+    let direct = id("lay-cable plant lamp");
+    assert_eq!(
+        task.validate_plan(&[via_junction[0], via_junction[1], direct]),
+        None
+    );
 }
