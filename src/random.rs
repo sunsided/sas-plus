@@ -4,7 +4,7 @@
 use alloc::format;
 use alloc::vec::Vec;
 
-use crate::{Effect, Fact, Operator, State, Task, Variable};
+use crate::{Axiom, Effect, Fact, Operator, State, Task, Variable};
 
 /// xorshift64* — good enough for test-case generation.
 #[derive(Clone, Debug)]
@@ -43,6 +43,9 @@ pub struct RandomTaskParams {
     pub max_cost: u32,
     /// Up to this many conditions per effect; `0` means no conditional effects.
     pub max_conditions: usize,
+    /// Number of binary derived variables, each in its own axiom layer, with
+    /// one or two rules apiece. Goals and preconditions may then mention them.
+    pub num_derived: usize,
 }
 
 impl Default for RandomTaskParams {
@@ -53,6 +56,7 @@ impl Default for RandomTaskParams {
             num_ops: 10,
             max_cost: 5,
             max_conditions: 0,
+            num_derived: 0,
         }
     }
 }
@@ -73,7 +77,7 @@ pub fn random_task(seed: u64, p: RandomTaskParams) -> Task {
             rng.range(0, u64::from(variables[var].domain_size) - 1) as u32,
         )
     };
-    let operators: Vec<Operator> = (0..p.num_ops)
+    let mut operators: Vec<Operator> = (0..p.num_ops)
         .map(|i| {
             let n_pre = rng.range(0, 2) as usize;
             let n_eff = rng.range(1, 2) as usize;
@@ -111,19 +115,56 @@ pub fn random_task(seed: u64, p: RandomTaskParams) -> Task {
             }
         })
         .collect();
-    let initial = State((0..p.num_vars).map(|v| fact(&mut rng, v).value).collect());
+    let mut initial = State((0..p.num_vars).map(|v| fact(&mut rng, v).value).collect());
     let n_goal = rng.range(1, 2) as usize;
-    let goal: Vec<Fact> = rng
+    let mut goal: Vec<Fact> = rng
         .distinct_vars(p.num_vars, n_goal)
         .into_iter()
         .map(|v| fact(&mut rng, v))
         .collect();
 
+    // Derived variables come last, so tasks without them stay the same per seed.
+    let mut variables = variables;
+    let mut axioms = Vec::new();
+    for layer in 0..p.num_derived {
+        let var = variables.len();
+        for _ in 0..rng.range(1, 2) {
+            // Conditions on state variables and lower layers (at any value, which
+            // includes negation as failure).
+            let n = rng.range(1, 2) as usize;
+            let conditions = rng
+                .distinct_vars(var, n)
+                .into_iter()
+                .map(|c| {
+                    let domain = variables[c].domain_size;
+                    Fact::new(c, rng.range(0, u64::from(domain) - 1) as u32)
+                })
+                .collect();
+            axioms.push(Axiom {
+                conditions,
+                head: Fact::new(var, 1),
+            });
+        }
+        variables.push(Variable {
+            axiom_layer: Some(layer as u32),
+            ..Variable::new(format!("d{layer}"), 2)
+        });
+        initial.0.push(0);
+        let derived = Fact::new(var, rng.range(0, 1) as u32);
+        if rng.range(0, 1) == 0 {
+            goal.push(derived);
+        } else {
+            let op = rng.range(0, p.num_ops.max(1) as u64 - 1) as usize;
+            if let Some(op) = operators.get_mut(op) {
+                op.pre.push(derived);
+            }
+        }
+    }
     Task {
         variables,
         operators,
         initial,
         goal,
-        axioms: Vec::new(),
+        axioms,
     }
 }
