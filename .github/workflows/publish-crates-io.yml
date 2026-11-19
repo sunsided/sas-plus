@@ -33,8 +33,16 @@ jobs:
         with:
           toolchain: stable
           components: clippy
+          targets: thumbv7em-none-eabihf
       - run: cargo clippy --all-targets --all-features -- -D warnings
       - run: cargo test --all-features
+      # The published guarantees: no_std with and without default features, and the MSRV.
+      - run: cargo build --lib --target thumbv7em-none-eabihf --no-default-features
+      - run: cargo build --lib --target thumbv7em-none-eabihf --all-features
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+        with:
+          toolchain: '1.85'
+      - run: cargo +1.85 build --lib --all-features
 
   crates-io:
     name: publish to crates.io
