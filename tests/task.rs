@@ -2,7 +2,8 @@
 
 use sas_plus::random::{RandomTaskParams, Rng, random_task};
 use sas_plus::{
-    Abstraction, Axiom, Effect, Fact, Operator, Projection, State, Task, TaskError, Variable,
+    Abstraction, Axiom, CausalGraph, Effect, Fact, Operator, Projection, State, Task, TaskError,
+    Variable,
 };
 
 fn tiny() -> Task {
@@ -152,6 +153,19 @@ fn axioms_are_evaluated_after_each_operator() {
         head: Fact::new(2, 0),
     });
     assert_eq!(t.apply(0, &t.initial), State(vec![1, 1, 1]));
+}
+
+#[test]
+fn causal_graph_links_conditions_to_effects() {
+    let mut t = tiny_derived();
+    t.operators[0].eff[1].conditions.push(Fact::new(2, 0));
+    let cg = CausalGraph::new(&t);
+    // pre a → b, eff a ↔ b, condition c → b, axiom b → c; no self-loops.
+    assert_eq!(cg.successors(0), [1]);
+    assert_eq!(cg.successors(1), [0, 2]);
+    assert_eq!(cg.successors(2), [1]);
+    assert_eq!(cg.predecessors(1), [0, 2]);
+    assert_eq!(cg.predecessors(2), [1]);
 }
 
 /// Projections stay admissible with conditional effects, whose conditions

@@ -16,6 +16,7 @@
 
 extern crate alloc;
 
+mod causal_graph;
 #[cfg(feature = "fdr")]
 pub mod fdr;
 mod lts;
@@ -24,6 +25,7 @@ mod projection;
 pub mod random;
 mod ranking;
 
+pub use causal_graph::CausalGraph;
 pub use lts::{LabeledTransitionSystem, Transition};
 pub use projection::Projection;
 
