@@ -11,6 +11,13 @@ use crate::{Abstraction, LabeledTransitionSystem, State, Task, Transition, Value
 /// treated as satisfiable. A conditional effect whose conditions mention
 /// variables outside the pattern may or may not fire, and both outcomes get a
 /// transition. Both keep the abstraction admissible.
+///
+/// An operator gets one transition per abstract state matching its
+/// precondition, times the product, over the pattern variables it may set
+/// through such uncertain effects, of the number of values each may end with.
+/// That is never more than the number of abstract states, but on a large
+/// pattern the transition list can grow toward
+/// `operators × abstract states × abstract states`; size patterns accordingly.
 #[derive(Clone, Debug)]
 pub struct Projection {
     ranking: Ranking,
