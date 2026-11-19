@@ -295,6 +295,11 @@ impl Task {
 
     /// The successor state. Effect conditions are evaluated in `state`;
     /// derived variables are then re-evaluated.
+    ///
+    /// Like [`Task::is_applicable`] and [`Task::is_goal`], this reads derived
+    /// variables from `state` as given, so `state` must have them evaluated:
+    /// start from [`Task::initial_state`] (not [`Task::initial`]) or call
+    /// [`Task::evaluate_axioms`] first. States returned by `apply` are.
     pub fn apply(&self, op: OpId, state: &State) -> State {
         let mut next = state.clone();
         for e in &self.operators[op].eff {
@@ -316,13 +321,14 @@ impl Task {
     /// fires; search code that needs speed on axiom-heavy tasks should index
     /// the rules itself.
     pub fn evaluate_axioms(&self, state: &mut State) {
-        if self.axioms.is_empty() {
-            return;
-        }
+        // Reset first: a derived variable without rules still holds its default.
         for (var, v) in self.variables.iter().enumerate() {
             if v.is_derived() {
                 state.0[var] = self.initial.0[var];
             }
+        }
+        if self.axioms.is_empty() {
+            return;
         }
         let mut done: Option<u32> = None;
         // Layers in ascending order, without collecting them.

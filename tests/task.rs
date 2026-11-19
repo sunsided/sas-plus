@@ -159,6 +159,13 @@ fn axioms_are_evaluated_after_each_operator() {
     assert_eq!(t.initial_state(), State(vec![0, 0, 0, 1]));
     assert_eq!(t.apply(0, &t.initial), State(vec![1, 1, 1, 0]));
 
+    // A derived variable without rules is reset to its default.
+    let mut t = tiny_derived();
+    t.axioms.clear();
+    let mut s = State(vec![0, 0, 1]);
+    t.evaluate_axioms(&mut s);
+    assert_eq!(s, State(vec![0, 0, 0]));
+
     // A rule deriving the default value never fires, so evaluation terminates.
     let mut t = tiny_derived();
     t.axioms.push(Axiom {
