@@ -1,6 +1,8 @@
+#![cfg(feature = "fdr")]
+
 use std::path::PathBuf;
 
-use sas_plus::fdr::{ConversionError, SasFile};
+use sas_plus::fdr::SasFile;
 
 fn fixture(name: &str) -> String {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -31,7 +33,7 @@ fn gripper_optimal_costs_follow_the_metric() {
     for (name, optimum) in [("gripper-costs", 7), ("gripper-unit", 5)] {
         let file = SasFile::parse(&fixture(name)).unwrap();
         assert_eq!(file.mutex_groups.len(), 5);
-        let task = file.to_task().unwrap();
+        let task = file.to_task();
         task.validate().unwrap();
         assert_eq!(task.num_variables(), 5);
         assert_eq!(task.operators.len(), 18);
@@ -46,7 +48,7 @@ fn gripper_optimal_costs_follow_the_metric() {
 #[test]
 fn effect_preconditions_become_operator_preconditions() {
     let file = SasFile::parse(&fixture("gripper-costs")).unwrap();
-    let task = file.to_task().unwrap();
+    let task = file.to_task();
     let pick = task
         .operators
         .iter()
@@ -71,7 +73,7 @@ fn effect_preconditions_become_operator_preconditions() {
 #[test]
 fn format_plan_matches_fast_downward() {
     let file = SasFile::parse(&fixture("gripper-costs")).unwrap();
-    let task = file.to_task().unwrap();
+    let task = file.to_task();
     let id = |n: &str| task.operators.iter().position(|o| o.name == n).unwrap();
     let plan = [
         id("pick ball1 rooma left"),
@@ -99,20 +101,28 @@ fn format_plan_labels_unit_costs_by_the_costs() {
 }
 
 #[test]
-fn rejects_features_plain_tasks_cannot_express() {
-    let cond = SasFile::parse(&fixture("conditional-effects")).unwrap();
-    assert_eq!(cond.operators[0].effects[1].conditions.len(), 1);
-    assert!(matches!(
-        cond.to_task(),
-        Err(ConversionError::ConditionalEffect { operator }) if operator == "move home office"
-    ));
+fn conditional_effects_and_axioms_carry_over_to_the_task() {
+    let file = SasFile::parse(&fixture("conditional-effects")).unwrap();
+    assert_eq!(file.operators[0].effects[1].conditions.len(), 1);
+    let task = file.to_task();
+    task.validate().unwrap();
+    let move_op = &task.operators[0];
+    assert_eq!(move_op.name, "move home office");
+    assert_eq!(
+        move_op.eff[1].conditions,
+        file.operators[0].effects[1].conditions
+    );
 
-    let derived = SasFile::parse(&fixture("derived-predicates")).unwrap();
-    assert_eq!(derived.variables[2].axiom_layer, Some(0));
-    assert!(matches!(
-        derived.to_task(),
-        Err(ConversionError::Axioms { count: 1 })
-    ));
+    let file = SasFile::parse(&fixture("derived-predicates")).unwrap();
+    assert_eq!(file.variables[2].axiom_layer, Some(0));
+    let task = file.to_task();
+    task.validate().unwrap();
+    assert_eq!(task.variables[2].axiom_layer, Some(0));
+    assert_eq!(task.axioms.len(), 1);
+    // connected(n1, n3) needs both edges open.
+    assert_eq!(task.perfect_heuristic()(&task.initial), Some(2));
+    assert_eq!(task.validate_plan(&[0]), None);
+    assert_eq!(task.validate_plan(&[0, 1]), Some(2));
 }
 
 #[test]
@@ -151,6 +161,20 @@ fn reports_errors_with_line_numbers() {
             "unexpected content",
         ),
     ];
+    let derived = fixture("derived-predicates");
+    let rule = derived.lines().position(|l| l == "2 1 0").unwrap() + 1;
+    let cases = cases.into_iter().chain([
+        (
+            derived.replacen("\n2 1 0\nend_rule", "\n2 0 1\nend_rule", 1),
+            rule,
+            "differs from the default",
+        ),
+        (
+            derived.replacen("var2\n0\n", "var2\n-1\n", 1),
+            rule,
+            "axiom sets state variable",
+        ),
+    ]);
     for (input, line, needle) in cases {
         let err = SasFile::parse(&input).expect_err(needle);
         assert!(err.message.contains(needle), "{needle}: {err}");

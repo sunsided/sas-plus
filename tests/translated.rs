@@ -1,12 +1,15 @@
 //! Real Fast Downward translator output (see tests/fixtures/translated/README.md).
 
-use sas_plus::fdr::{ConversionError, SasFile};
+#![cfg(feature = "fdr")]
 
-const SMALL: [(&str, u64); 4] = [
+use sas_plus::fdr::SasFile;
+
+const SMALL: [(&str, u64); 5] = [
     ("sussman-anomaly", 3),
     ("gripper-2", 3),
     ("gripper-4", 9),
     ("gripper-costs", 7),
+    ("courier", 16),
 ];
 /// Plain SAS+ tasks: no conditional effects, no axioms.
 const PLAIN: [&str; 6] = [
@@ -38,20 +41,19 @@ fn translator_output_round_trips_byte_for_byte() {
 }
 
 #[test]
-fn plain_tasks_convert_to_valid_tasks() {
-    for name in PLAIN {
+fn all_tasks_convert_to_valid_tasks() {
+    for name in PLAIN.iter().chain(&CONDITIONAL) {
         let file = SasFile::parse(&read(name)).unwrap();
         file.to_task()
-            .unwrap_or_else(|e| panic!("{name}: {e}"))
             .validate()
-            .unwrap();
+            .unwrap_or_else(|e| panic!("{name}: {e}"));
     }
 }
 
 #[test]
 fn small_tasks_have_their_known_optimal_cost() {
     for (name, optimum) in SMALL {
-        let task = SasFile::parse(&read(name)).unwrap().to_task().unwrap();
+        let task = SasFile::parse(&read(name)).unwrap().to_task();
         assert_eq!(
             task.perfect_heuristic()(&task.initial),
             Some(optimum),
@@ -97,9 +99,8 @@ fn action_costs_survive_translation() {
     );
     let hand = SasFile::parse(&std::fs::read_to_string(hand).unwrap())
         .unwrap()
-        .to_task()
-        .unwrap();
-    let translated = file.to_task().unwrap();
+        .to_task();
+    let translated = file.to_task();
     assert_eq!(
         hand.perfect_heuristic()(&hand.initial),
         translated.perfect_heuristic()(&translated.initial)
@@ -107,22 +108,25 @@ fn action_costs_survive_translation() {
 }
 
 #[test]
-fn conditional_effects_survive_translation_and_are_rejected_by_to_task() {
+fn conditional_effects_survive_translation_and_conversion() {
     for name in CONDITIONAL {
         let file = SasFile::parse(&read(name)).unwrap();
-        let conditional = file
+        let in_file = file
             .operators
             .iter()
-            .filter(|o| o.effects.iter().any(|e| !e.conditions.is_empty()))
+            .flat_map(|o| &o.effects)
+            .filter(|e| !e.conditions.is_empty())
             .count();
-        assert!(conditional > 0, "{name}: no effect conditions left");
-        assert!(
-            matches!(
-                file.to_task(),
-                Err(ConversionError::ConditionalEffect { .. })
-            ),
-            "{name}"
-        );
+        assert!(in_file > 0, "{name}: no effect conditions left");
+        let task = file.to_task();
+        task.validate().unwrap_or_else(|e| panic!("{name}: {e}"));
+        let in_task = task
+            .operators
+            .iter()
+            .flat_map(|o| &o.eff)
+            .filter(|e| !e.conditions.is_empty())
+            .count();
+        assert_eq!(in_file, in_task, "{name}");
     }
 }
 

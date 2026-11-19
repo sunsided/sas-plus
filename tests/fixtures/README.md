@@ -12,8 +12,8 @@ line: with metric `0`, every operator costs 1 regardless of the cost field.
 |---|---|---|
 | `gripper-costs` | mutex groups, action costs (move 3, pick/drop 1) | 7 |
 | `gripper-unit` | same task, `metric 0` | 5 |
-| `conditional-effects` | conditional effects, `<none of those>` value | (not a plain SAS+ task) |
-| `derived-predicates` | derived variable (axiom layer 0), one axiom rule | (not a plain SAS+ task) |
+| `conditional-effects` | conditional effects, `<none of those>` value | not checked |
+| `derived-predicates` | derived variable (axiom layer 0), one axiom rule | 2 |
 
 Real translator output lives in [`translated/`](translated). To add more:
 

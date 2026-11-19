@@ -5,12 +5,12 @@
 //! representation (FDR / SAS+). [`SasFile`] mirrors that file faithfully,
 //! including mutex groups, conditional effects and axioms. It writes back
 //! byte-for-byte what it reads, and [`SasFile::to_task`] converts it to a
-//! plain [`Task`] when the task uses neither of the latter two.
+//! [`Task`].
 //!
 //! ```no_run
 //! let text = std::fs::read_to_string("output.sas")?;
 //! let file: sas_plus::fdr::SasFile = text.parse()?;
-//! let task = file.to_task()?;
+//! let task = file.to_task();
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
@@ -20,12 +20,13 @@ use alloc::vec::Vec;
 use core::fmt::{self, Write as _};
 use core::str::FromStr;
 
-use crate::{Fact, OpId, Operator, State, Task, Value, VarId, Variable};
+use crate::{Axiom, Effect, Fact, OpId, Operator, State, Task, Value, VarId, Variable};
 
 /// The only file version this module understands (Fast Downward ≥ 20.06).
 pub const SAS_FILE_VERSION: u32 = 3;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SasFile {
     /// `false` means unit costs: every operator costs 1 whatever its cost field says.
     pub use_metric: bool,
@@ -38,6 +39,7 @@ pub struct SasFile {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SasVariable {
     pub name: String,
     /// `None` for ordinary state variables, `Some(layer)` for derived variables.
@@ -47,6 +49,7 @@ pub struct SasVariable {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SasOperator {
     /// Ground action name without parentheses, e.g. `pick ball1 rooma left`.
     pub name: String,
@@ -58,6 +61,7 @@ pub struct SasOperator {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SasEffect {
     /// Effect conditions; non-empty only for conditional effects.
     pub conditions: Vec<Fact>,
@@ -68,6 +72,7 @@ pub struct SasEffect {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SasAxiom {
     pub conditions: Vec<Fact>,
     pub var: VarId,
@@ -77,6 +82,7 @@ pub struct SasAxiom {
 
 /// A syntax or consistency error, with the 1-based line it was found on.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ParseError {
     pub line: usize,
     pub message: String,
@@ -89,28 +95,6 @@ impl fmt::Display for ParseError {
 }
 
 impl core::error::Error for ParseError {}
-
-/// Why a [`SasFile`] cannot be represented as a plain [`Task`].
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ConversionError {
-    ConditionalEffect { operator: String },
-    Axioms { count: usize },
-    DerivedVariable { var: VarId },
-}
-
-impl fmt::Display for ConversionError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::ConditionalEffect { operator } => {
-                write!(f, "operator `{operator}` has a conditional effect")
-            }
-            Self::Axioms { count } => write!(f, "task has {count} axiom rules"),
-            Self::DerivedVariable { var } => write!(f, "variable {var} is derived"),
-        }
-    }
-}
-
-impl core::error::Error for ConversionError {}
 
 impl SasFile {
     pub fn parse(text: &str) -> Result<Self, ParseError> {
@@ -131,27 +115,15 @@ impl SasFile {
         &self.variables[fact.var].values[fact.value as usize]
     }
 
-    /// Converts to a plain SAS+ task. Prevail conditions and effect
-    /// preconditions become operator preconditions; costs follow the metric.
-    pub fn to_task(&self) -> Result<Task, ConversionError> {
-        if !self.axioms.is_empty() {
-            return Err(ConversionError::Axioms {
-                count: self.axioms.len(),
-            });
-        }
-        if let Some(var) = self.variables.iter().position(|v| v.axiom_layer.is_some()) {
-            return Err(ConversionError::DerivedVariable { var });
-        }
+    /// Converts to a [`Task`]. Prevail conditions and effect preconditions
+    /// become operator preconditions; costs follow the metric. Mutex groups
+    /// and fact names are not part of a task and stay here.
+    pub fn to_task(&self) -> Task {
         let operators = self
             .operators
             .iter()
             .enumerate()
             .map(|(id, op)| {
-                if op.effects.iter().any(|e| !e.conditions.is_empty()) {
-                    return Err(ConversionError::ConditionalEffect {
-                        operator: op.name.clone(),
-                    });
-                }
                 let mut pre = op.prevail.clone();
                 pre.extend(
                     op.effects
@@ -159,31 +131,45 @@ impl SasFile {
                         .filter_map(|e| Some(Fact::new(e.var, e.pre?))),
                 );
                 pre.sort_unstable();
-                Ok(Operator {
+                pre.dedup();
+                Operator {
                     name: op.name.clone(),
                     pre,
                     eff: op
                         .effects
                         .iter()
-                        .map(|e| Fact::new(e.var, e.post))
+                        .map(|e| Effect {
+                            conditions: e.conditions.clone(),
+                            fact: Fact::new(e.var, e.post),
+                        })
                         .collect(),
                     cost: self.operator_cost(id),
-                })
+                }
             })
-            .collect::<Result<_, _>>()?;
-        Ok(Task {
+            .collect();
+        Task {
             variables: self
                 .variables
                 .iter()
                 .map(|v| Variable {
                     name: v.name.clone(),
                     domain_size: v.values.len() as u32,
+                    axiom_layer: v.axiom_layer,
                 })
                 .collect(),
             operators,
             initial: State(self.initial.clone()),
             goal: self.goal.clone(),
-        })
+            // A rule's `pre` value is the derived variable's default, which the task keeps in `initial`.
+            axioms: self
+                .axioms
+                .iter()
+                .map(|a| Axiom {
+                    conditions: a.conditions.clone(),
+                    head: Fact::new(a.var, a.post),
+                })
+                .collect(),
+        }
     }
 
     /// Formats a plan the way Fast Downward writes `sas_plan`, for use with
@@ -389,7 +375,7 @@ impl<'a> Parser<'a> {
             .collect::<Result<_, ParseError>>()?;
 
         self.expect("begin_state")?;
-        let initial = (0..num_vars)
+        let initial: Vec<Value> = (0..num_vars)
             .map(|var| {
                 let n = self.number::<i64>("initial value")?;
                 self.value(var, n)
@@ -408,7 +394,7 @@ impl<'a> Parser<'a> {
 
         let num_axioms: usize = self.number("number of axioms")?;
         let axioms = (0..num_axioms)
-            .map(|_| self.axiom())
+            .map(|_| self.axiom(&variables, &initial))
             .collect::<Result<_, _>>()?;
 
         while let Some(extra) = self.lines.next() {
@@ -504,7 +490,11 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn axiom(&mut self) -> Result<SasAxiom, ParseError> {
+    fn axiom(
+        &mut self,
+        variables: &[SasVariable],
+        initial: &[Value],
+    ) -> Result<SasAxiom, ParseError> {
         self.expect("begin_rule")?;
         let conditions = self.facts("number of axiom conditions")?;
         let (var, pre, post) = match self.numbers()?.as_slice() {
@@ -514,6 +504,16 @@ impl<'a> Parser<'a> {
             }
             _ => return self.error("expected `<var> <pre> <post>`"),
         };
+        if variables[var].axiom_layer.is_none() {
+            return self.error(format!("axiom sets state variable {var}"));
+        }
+        // `to_task` relies on this: the initial state holds the default.
+        if pre != initial[var] {
+            return self.error(format!(
+                "axiom pre value {pre} differs from the default {} of variable {var}",
+                initial[var]
+            ));
+        }
         self.expect("end_rule")?;
         Ok(SasAxiom {
             conditions,

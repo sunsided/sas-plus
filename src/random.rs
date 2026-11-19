@@ -4,7 +4,7 @@
 use alloc::format;
 use alloc::vec::Vec;
 
-use crate::{Fact, Operator, State, Task, Variable};
+use crate::{Effect, Fact, Operator, State, Task, Variable};
 
 /// xorshift64* — good enough for test-case generation.
 #[derive(Clone, Debug)]
@@ -41,6 +41,8 @@ pub struct RandomTaskParams {
     pub max_domain: u32,
     pub num_ops: usize,
     pub max_cost: u32,
+    /// Up to this many conditions per effect; `0` means no conditional effects.
+    pub max_conditions: usize,
 }
 
 impl Default for RandomTaskParams {
@@ -50,6 +52,7 @@ impl Default for RandomTaskParams {
             max_domain: 3,
             num_ops: 10,
             max_cost: 5,
+            max_conditions: 0,
         }
     }
 }
@@ -57,9 +60,11 @@ impl Default for RandomTaskParams {
 pub fn random_task(seed: u64, p: RandomTaskParams) -> Task {
     let mut rng = Rng::new(seed);
     let variables: Vec<Variable> = (0..p.num_vars)
-        .map(|i| Variable {
-            name: format!("v{i}"),
-            domain_size: rng.range(2, u64::from(p.max_domain.max(2))) as u32,
+        .map(|i| {
+            Variable::new(
+                format!("v{i}"),
+                rng.range(2, u64::from(p.max_domain.max(2))) as u32,
+            )
         })
         .collect();
     let fact = |rng: &mut Rng, var: usize| {
@@ -68,7 +73,7 @@ pub fn random_task(seed: u64, p: RandomTaskParams) -> Task {
             rng.range(0, u64::from(variables[var].domain_size) - 1) as u32,
         )
     };
-    let operators = (0..p.num_ops)
+    let operators: Vec<Operator> = (0..p.num_ops)
         .map(|i| {
             let n_pre = rng.range(0, 2) as usize;
             let n_eff = rng.range(1, 2) as usize;
@@ -80,7 +85,23 @@ pub fn random_task(seed: u64, p: RandomTaskParams) -> Task {
             let eff = rng
                 .distinct_vars(p.num_vars, n_eff)
                 .into_iter()
-                .map(|v| fact(&mut rng, v))
+                .map(|v| {
+                    let head = fact(&mut rng, v);
+                    // No draw without conditions, so seeds keep their tasks.
+                    let conditions = if p.max_conditions == 0 {
+                        Vec::new()
+                    } else {
+                        let n = rng.range(0, p.max_conditions as u64) as usize;
+                        rng.distinct_vars(p.num_vars, n)
+                            .into_iter()
+                            .map(|c| fact(&mut rng, c))
+                            .collect()
+                    };
+                    Effect {
+                        conditions,
+                        fact: head,
+                    }
+                })
                 .collect();
             Operator {
                 name: format!("op{i}"),
@@ -92,17 +113,17 @@ pub fn random_task(seed: u64, p: RandomTaskParams) -> Task {
         .collect();
     let initial = State((0..p.num_vars).map(|v| fact(&mut rng, v).value).collect());
     let n_goal = rng.range(1, 2) as usize;
-    let goal = rng
+    let goal: Vec<Fact> = rng
         .distinct_vars(p.num_vars, n_goal)
         .into_iter()
         .map(|v| fact(&mut rng, v))
         .collect();
-    let task = Task {
+
+    Task {
         variables,
         operators,
         initial,
         goal,
-    };
-    debug_assert!(task.validate().is_ok());
-    task
+        axioms: Vec::new(),
+    }
 }

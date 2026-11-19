@@ -19,7 +19,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         file.axioms.len(),
         u8::from(file.use_metric)
     );
-    let task = file.to_task()?;
+    let task = file.to_task();
     task.validate()?;
     // perfect_heuristic() stores one transition per operator and state.
     let transitions = task

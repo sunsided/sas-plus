@@ -5,22 +5,30 @@
 //! describes planning tasks with finite-domain state variables, operators
 //! with preconditions and effects, and partial goals.
 //!
-//! Tasks come from Fast Downward's translator via [`fdr::SasFile`] (the
-//! `output.sas` format), from your own grounder, or from [`random`] for tests.
+//! Tasks may also use Fast Downward's two extensions of SAS+: conditional
+//! effects and axioms (derived variables).
+//!
+//! Tasks come from Fast Downward's translator via `fdr::SasFile` (the
+//! `output.sas` format, feature `fdr`), from your own grounder, or from
+//! `random` for tests (feature `random`).
 
 #![no_std]
 
 extern crate alloc;
 
+#[cfg(feature = "fdr")]
 pub mod fdr;
 mod lts;
 mod projection;
+#[cfg(feature = "random")]
 pub mod random;
+mod ranking;
 
 pub use lts::{LabeledTransitionSystem, Transition};
 pub use projection::Projection;
 
 use alloc::string::String;
+use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt;
 
@@ -30,6 +38,7 @@ pub type OpId = usize;
 
 /// A variable/value assignment `var = value`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Fact {
     pub var: VarId,
     pub value: Value,
@@ -41,38 +50,121 @@ impl Fact {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Variable {
     pub name: String,
     pub domain_size: u32,
+    /// `None` for state variables, `Some(layer)` for derived variables, which
+    /// only axioms set. Axioms of lower layers are evaluated first.
+    pub axiom_layer: Option<u32>,
 }
 
-#[derive(Clone, Debug)]
+impl Variable {
+    /// A state variable (not derived).
+    pub fn new(name: impl Into<String>, domain_size: u32) -> Self {
+        Self {
+            name: name.into(),
+            domain_size,
+            axiom_layer: None,
+        }
+    }
+
+    pub fn is_derived(&self) -> bool {
+        self.axiom_layer.is_some()
+    }
+}
+
+/// An effect `fact` that fires when all `conditions` hold in the state the
+/// operator is applied in. Unconditional effects have no conditions.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct Effect {
+    pub conditions: Vec<Fact>,
+    pub fact: Fact,
+}
+
+impl Effect {
+    /// An unconditional effect.
+    pub fn new(fact: Fact) -> Self {
+        Self {
+            conditions: Vec::new(),
+            fact,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Operator {
     pub name: String,
     pub pre: Vec<Fact>,
-    pub eff: Vec<Fact>,
+    /// Applied in order, so a later effect on the same variable wins.
+    pub eff: Vec<Effect>,
     pub cost: u32,
+}
+
+/// A rule `conditions → head` that sets the derived variable `head.var`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct Axiom {
+    pub conditions: Vec<Fact>,
+    pub head: Fact,
 }
 
 /// A complete assignment: `state.0[var]` is the value of `var`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct State(pub Vec<Value>);
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Task {
     pub variables: Vec<Variable>,
     pub operators: Vec<Operator>,
+    /// As in Fast Downward, the values of derived variables here are their
+    /// defaults, which hold unless an axiom derives otherwise. Use
+    /// [`Task::initial_state`] for the state with axioms evaluated.
     pub initial: State,
     pub goal: Vec<Fact>,
+    pub axioms: Vec<Axiom>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TaskError {
     InitialStateArity,
-    ValueOutOfRange { fact: Fact },
-    UnknownVariable { fact: Fact },
-    DuplicateEffect { op: OpId, var: VarId },
+    ValueOutOfRange {
+        fact: Fact,
+    },
+    UnknownVariable {
+        fact: Fact,
+    },
+    DuplicateEffect {
+        op: OpId,
+        var: VarId,
+    },
+    /// An operator requires two values of one variable.
+    ContradictoryPrecondition {
+        op: OpId,
+        var: VarId,
+    },
+    /// The goal requires two values of one variable.
+    ContradictoryGoal {
+        var: VarId,
+    },
+    /// An operator sets a derived variable.
+    DerivedVariableEffect {
+        op: OpId,
+        var: VarId,
+    },
+    /// An axiom sets a state variable.
+    AxiomHeadNotDerived {
+        axiom: usize,
+    },
+    /// An axiom depends on a derived variable of a higher layer.
+    AxiomLayer {
+        axiom: usize,
+    },
 }
 
 impl fmt::Display for TaskError {
@@ -83,6 +175,21 @@ impl fmt::Display for TaskError {
             Self::UnknownVariable { fact } => write!(f, "unknown variable in {fact:?}"),
             Self::DuplicateEffect { op, var } => {
                 write!(f, "operator {op} has two effects on variable {var}")
+            }
+            Self::ContradictoryPrecondition { op, var } => {
+                write!(f, "operator {op} requires two values of variable {var}")
+            }
+            Self::ContradictoryGoal { var } => {
+                write!(f, "the goal requires two values of variable {var}")
+            }
+            Self::DerivedVariableEffect { op, var } => {
+                write!(f, "operator {op} sets derived variable {var}")
+            }
+            Self::AxiomHeadNotDerived { axiom } => {
+                write!(f, "axiom {axiom} sets a state variable")
+            }
+            Self::AxiomLayer { axiom } => {
+                write!(f, "axiom {axiom} depends on a higher axiom layer")
             }
         }
     }
@@ -127,13 +234,48 @@ impl Task {
             check(&Fact::new(var, value))?;
         }
         self.goal.iter().try_for_each(check)?;
+        if let Some(var) = contradiction(&self.goal) {
+            return Err(TaskError::ContradictoryGoal { var });
+        }
         for (id, op) in self.operators.iter().enumerate() {
             op.pre.iter().try_for_each(check)?;
-            op.eff.iter().try_for_each(check)?;
-            let mut vars: Vec<_> = op.eff.iter().map(|f| f.var).collect();
+            if let Some(var) = contradiction(&op.pre) {
+                return Err(TaskError::ContradictoryPrecondition { op: id, var });
+            }
+            for e in &op.eff {
+                e.conditions.iter().try_for_each(check)?;
+                check(&e.fact)?;
+                if self.variables[e.fact.var].is_derived() {
+                    return Err(TaskError::DerivedVariableEffect {
+                        op: id,
+                        var: e.fact.var,
+                    });
+                }
+            }
+            // Conditional effects on one variable may coexist; the last firing one wins.
+            let mut vars: Vec<_> = op
+                .eff
+                .iter()
+                .filter(|e| e.conditions.is_empty())
+                .map(|e| e.fact.var)
+                .collect();
             vars.sort_unstable();
             if let Some(w) = vars.windows(2).find(|w| w[0] == w[1]) {
                 return Err(TaskError::DuplicateEffect { op: id, var: w[0] });
+            }
+        }
+        for (id, axiom) in self.axioms.iter().enumerate() {
+            axiom.conditions.iter().try_for_each(check)?;
+            check(&axiom.head)?;
+            let Some(layer) = self.variables[axiom.head.var].axiom_layer else {
+                return Err(TaskError::AxiomHeadNotDerived { axiom: id });
+            };
+            if axiom
+                .conditions
+                .iter()
+                .any(|c| self.variables[c.var].axiom_layer.is_some_and(|l| l > layer))
+            {
+                return Err(TaskError::AxiomLayer { axiom: id });
             }
         }
         Ok(())
@@ -144,18 +286,69 @@ impl Task {
     }
 
     pub fn is_applicable(&self, op: OpId, state: &State) -> bool {
-        self.operators[op]
-            .pre
-            .iter()
-            .all(|f| state.0[f.var] == f.value)
+        holds(&self.operators[op].pre, state)
     }
 
+    /// The successor state. Effect conditions are evaluated in `state`;
+    /// derived variables are then re-evaluated.
     pub fn apply(&self, op: OpId, state: &State) -> State {
         let mut next = state.clone();
-        for f in &self.operators[op].eff {
-            next.0[f.var] = f.value;
+        for e in &self.operators[op].eff {
+            if holds(&e.conditions, state) {
+                next.0[e.fact.var] = e.fact.value;
+            }
         }
+        self.evaluate_axioms(&mut next);
         next
+    }
+
+    /// Recomputes all derived variables of `state` from its state variables:
+    /// each derived variable is reset to its default (its value in
+    /// [`Task::initial`]), then the axioms fire layer by layer until nothing
+    /// changes, as in Fast Downward. A variable keeps the first non-default
+    /// value derived for it.
+    pub fn evaluate_axioms(&self, state: &mut State) {
+        if self.axioms.is_empty() {
+            return;
+        }
+        let mut layers: Vec<u32> = Vec::new();
+        for (var, v) in self.variables.iter().enumerate() {
+            if let Some(layer) = v.axiom_layer {
+                state.0[var] = self.initial.0[var];
+                layers.push(layer);
+            }
+        }
+        layers.sort_unstable();
+        layers.dedup();
+        for layer in layers {
+            let rules: Vec<&Axiom> = self
+                .axioms
+                .iter()
+                .filter(|a| self.variables[a.head.var].axiom_layer == Some(layer))
+                .collect();
+            let mut changed = true;
+            while changed {
+                changed = false;
+                for a in &rules {
+                    // Only a variable still at its default is derived, so the fixpoint is reached.
+                    let default = self.initial.0[a.head.var];
+                    if state.0[a.head.var] == default
+                        && a.head.value != default
+                        && holds(&a.conditions, state)
+                    {
+                        state.0[a.head.var] = a.head.value;
+                        changed = true;
+                    }
+                }
+            }
+        }
+    }
+
+    /// The initial state with derived variables evaluated.
+    pub fn initial_state(&self) -> State {
+        let mut state = self.initial.clone();
+        self.evaluate_axioms(&mut state);
+        state
     }
 
     pub fn applicable_operators<'a>(&'a self, state: &'a State) -> impl Iterator<Item = OpId> + 'a {
@@ -163,7 +356,7 @@ impl Task {
     }
 
     pub fn is_goal(&self, state: &State) -> bool {
-        self.goal.iter().all(|f| state.0[f.var] == f.value)
+        holds(&self.goal, state)
     }
 
     /// Operator costs indexed by operator id (the label cost function).
@@ -174,7 +367,7 @@ impl Task {
     /// Checks that `plan` is applicable from the initial state and reaches the goal.
     /// Returns the plan cost.
     pub fn validate_plan(&self, plan: &[OpId]) -> Option<u64> {
-        let mut state = self.initial.clone();
+        let mut state = self.initial_state();
         let mut cost = 0;
         for &op in plan {
             if !self.is_applicable(op, &state) {
@@ -186,11 +379,58 @@ impl Task {
         self.is_goal(&state).then_some(cost)
     }
 
-    /// Optimal plan cost from `state`, by exhaustive projection onto all
-    /// variables. Exponential; intended for tests on tiny tasks.
+    /// Optimal plan cost from `state` (with derived variables evaluated),
+    /// by building the full state space over all state variables.
+    /// Exponential; intended for tests on tiny tasks.
     pub fn perfect_heuristic(&self) -> impl Fn(&State) -> Option<u64> + '_ {
-        let full = Projection::new(self, (0..self.num_variables()).collect());
-        let h = full.lts().goal_distances(&self.costs());
-        move |s| h[full.rank(s)]
+        let vars = (0..self.num_variables())
+            .filter(|&v| !self.variables[v].is_derived())
+            .collect();
+        let ranking = ranking::Ranking::new(self, vars);
+        let mut state = self.initial.clone();
+        let mut set = |index: usize| {
+            ranking.unrank(index, &mut state);
+            self.evaluate_axioms(&mut state);
+            state.clone()
+        };
+        let mut transitions = Vec::new();
+        for (label, op) in self.operators.iter().enumerate() {
+            // Preconditions on state variables pick the candidates; derived ones are checked after.
+            for src in ranking.matching(&op.pre) {
+                let s = set(src);
+                if self.is_applicable(label, &s) {
+                    let dst = ranking.rank(&self.apply(label, &s));
+                    transitions.push(Transition { src, label, dst });
+                }
+            }
+        }
+        let mut goal = vec![false; ranking.num_states];
+        for index in ranking.matching(&self.goal) {
+            goal[index] = self.is_goal(&set(index));
+        }
+        let lts = LabeledTransitionSystem {
+            num_states: ranking.num_states,
+            num_labels: self.operators.len(),
+            transitions,
+            goal,
+            initial: Some(ranking.rank(&self.initial)),
+        };
+        let h = lts.goal_distances(&self.costs());
+        move |s| h[ranking.rank(s)]
     }
+}
+
+/// A variable that `facts` assign two different values, if any.
+fn contradiction(facts: &[Fact]) -> Option<VarId> {
+    let mut sorted = facts.to_vec();
+    sorted.sort_unstable();
+    sorted.dedup();
+    sorted
+        .windows(2)
+        .find(|w| w[0].var == w[1].var)
+        .map(|w| w[0].var)
+}
+
+fn holds(facts: &[Fact], state: &State) -> bool {
+    facts.iter().all(|f| state.0[f.var] == f.value)
 }

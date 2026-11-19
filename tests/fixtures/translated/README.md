@@ -21,7 +21,7 @@ Each folder holds the PDDL input next to the output.
 | `get-paid4` | VHPOP `briefcase-world-domain.pddl` (conditional effects) | VHPOP `get-paid4.pddl` | 20 / 44 | (conditional effects) |
 
 `gripper-costs` encodes the same task as the hand-written `../gripper-costs`, and the tests check that both have the same optimal cost.
-In `courier` and `get-paid4`, the translator keeps conditional effects on the operators that move a container (van, briefcase) along with its contents. `to_task()` rejects those tasks with `ConversionError::ConditionalEffect`.
+In `courier` and `get-paid4`, the translator keeps conditional effects on the operators that move a container (van, briefcase) along with its contents. `to_task()` keeps them as effect conditions; `courier` is small enough to check its optimum (16).
 
 Optimal costs are verified by exhaustive search (`Task::perfect_heuristic`) in the tests.
 
