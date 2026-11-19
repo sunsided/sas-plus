@@ -6,8 +6,10 @@
 //! with preconditions and effects, and partial goals.
 
 mod lts;
+mod projection;
 
 pub use lts::{LabeledTransitionSystem, Transition};
+pub use projection::Projection;
 
 use std::fmt;
 
@@ -171,5 +173,13 @@ impl Task {
             cost += u64::from(self.operators[op].cost);
         }
         self.is_goal(&state).then_some(cost)
+    }
+
+    /// Optimal plan cost from `state`, by exhaustive projection onto all
+    /// variables. Exponential; intended for tests on tiny tasks.
+    pub fn perfect_heuristic(&self) -> impl Fn(&State) -> Option<u64> + '_ {
+        let full = Projection::new(self, (0..self.num_variables()).collect());
+        let h = full.lts().goal_distances(&self.costs());
+        move |s| h[full.rank(s)]
     }
 }
