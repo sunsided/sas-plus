@@ -25,8 +25,10 @@ impl Projection {
         let ranking = Ranking::new(task, pattern);
 
         let mut transitions = Vec::new();
-        let mut fired = Vec::new();
-        let mut dsts = Vec::new();
+        // Per pattern position, the values it may end with; reused across states.
+        let mut outcomes: Vec<Vec<Value>> = vec![Vec::new(); ranking.vars.len()];
+        let mut touched: Vec<usize> = Vec::new();
+        let mut digits: Vec<usize> = Vec::new();
         for (label, op) in task.operators.iter().enumerate() {
             // Effects on pattern variables: (position, value, conditions, sure to fire if
             // their pattern conditions hold, i.e. no conditions outside the pattern).
@@ -50,33 +52,46 @@ impl Projection {
                     transitions.push(Transition { src, label, dst });
                     continue;
                 }
-                fired.clear();
-                fired.extend(
-                    effects
-                        .iter()
-                        .filter(|e| ranking.holds(src, e.2))
-                        .map(|e| (e.0, e.1, e.3)),
-                );
-                let maybe = fired.iter().filter(|e| !e.2).count();
-                assert!(maybe < 24, "too many uncertain conditional effects");
-                dsts.clear();
-                for mask in 0..1usize << maybe {
-                    let mut dst = src;
-                    let mut bit = 0;
-                    for &(i, val, sure) in &fired {
-                        let fires = sure || {
-                            bit += 1;
-                            mask & 1 << (bit - 1) != 0
-                        };
-                        if fires {
-                            dst = ranking.set(dst, i, val);
-                        }
-                    }
-                    dsts.push(dst);
+                // Effects apply in order, so a variable ends with the value of its last
+                // firing effect. A sure effect fixes that value; a maybe effect adds an
+                // alternative. Each effect sets one variable, so the variables are
+                // independent and the successors are all combinations.
+                for &i in &touched {
+                    outcomes[i].clear();
                 }
-                dsts.sort_unstable();
-                dsts.dedup();
-                transitions.extend(dsts.iter().map(|&dst| Transition { src, label, dst }));
+                touched.clear();
+                for &(i, value, conditions, sure) in &effects {
+                    if !ranking.holds(src, conditions) {
+                        continue;
+                    }
+                    let values = &mut outcomes[i];
+                    if values.is_empty() {
+                        touched.push(i);
+                        values.push(ranking.value(src, i) as Value);
+                    }
+                    if sure {
+                        values.clear();
+                        values.push(value);
+                    } else if !values.contains(&value) {
+                        values.push(value);
+                    }
+                }
+                digits.clear();
+                digits.resize(touched.len(), 0);
+                loop {
+                    let dst = touched
+                        .iter()
+                        .zip(&digits)
+                        .fold(src, |d, (&i, &k)| ranking.set(d, i, outcomes[i][k]));
+                    transitions.push(Transition { src, label, dst });
+                    let Some(j) =
+                        (0..touched.len()).find(|&j| digits[j] + 1 < outcomes[touched[j]].len())
+                    else {
+                        break;
+                    };
+                    digits[j] += 1;
+                    digits[..j].fill(0);
+                }
             }
         }
         let mut goal = vec![false; ranking.num_states];

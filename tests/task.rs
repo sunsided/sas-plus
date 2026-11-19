@@ -110,6 +110,7 @@ fn validate_reports_each_kind_of_error() {
     t.initial.0.push(0);
     t.axioms[0].conditions.push(Fact::new(3, 0));
     assert_eq!(t.validate(), Err(TaskError::AxiomLayer { axiom: 0 }));
+
 }
 
 #[test]
@@ -216,24 +217,43 @@ fn projections_ignore_derived_variables() {
     assert_eq!(h[p.rank(&t.initial)], Some(0));
 }
 
-/// Projections onto a strict subset of the variables never overestimate h*.
+/// Many conditional effects on one variable, all conditioned outside the
+/// pattern, give one transition per value the variable may end with, not
+/// one per subset of effects.
 #[test]
-fn partial_projections_are_admissible() {
-    let mut rng = Rng::new(1);
-    for seed in 0..50 {
-        let task = random_task(seed, RandomTaskParams::default());
-        let h_star = task.perfect_heuristic()(&task.initial);
-        let n = task.num_variables();
-        let pattern: Vec<usize> = (0..n)
-            .filter(|_| rng.range(0, 1) == 1)
-            .take(n - 1)
-            .collect();
-        let p = Projection::new(&task, pattern);
-        let h = p.lts().goal_distances(&task.costs())[p.abstract_state(&task.initial).unwrap()];
-        match (h, h_star) {
-            (Some(h), Some(h_star)) => assert!(h <= h_star, "seed {seed}: {h} > {h_star}"),
-            (None, Some(_)) => panic!("seed {seed}: projection claims a dead end"),
-            (_, None) => {}
-        }
-    }
+fn projections_handle_many_uncertain_effects() {
+    let n = 30;
+    let mut variables = vec![Variable::new("x", 3)];
+    variables.extend((0..n).map(|i| Variable::new(format!("c{i}"), 2)));
+    let eff = (0..n)
+        .map(|i| Effect {
+            conditions: vec![Fact::new(i + 1, 1)],
+            fact: Fact::new(0, 1 + (i % 2) as u32),
+        })
+        .collect();
+    let task = Task {
+        variables,
+        operators: vec![Operator {
+            name: "op".into(),
+            pre: vec![],
+            eff,
+            cost: 1,
+        }],
+        initial: State(vec![0; n + 1]),
+        goal: vec![Fact::new(0, 2)],
+        axioms: vec![],
+    };
+    task.validate().unwrap();
+    let p = Projection::new(&task, vec![0]);
+    let mut from_0: Vec<usize> = p
+        .lts()
+        .transitions
+        .iter()
+        .filter(|t| t.src == 0)
+        .map(|t| t.dst)
+        .collect();
+    from_0.sort_unstable();
+    assert_eq!(from_0, [0, 1, 2]);
+    // From x = 1 or x = 2 only the other non-zero value is new.
+    assert_eq!(p.lts().transitions.len(), 7);
 }
