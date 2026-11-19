@@ -4,9 +4,12 @@
 //! SAS+ (*Simplified Action Structures*, extended; Bäckström & Nebel 1995)
 //! describes planning tasks with finite-domain state variables, operators
 //! with preconditions and effects, and partial goals.
+//!
+//! Use [`random`] to generate small tasks for property tests.
 
 mod lts;
 mod projection;
+pub mod random;
 
 pub use lts::{LabeledTransitionSystem, Transition};
 pub use projection::Projection;
