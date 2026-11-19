@@ -26,28 +26,31 @@ impl LabeledTransitionSystem {
     /// Cheapest cost to reach a goal state from each state, under `costs`
     /// (indexed by label). `None` = no goal reachable.
     pub fn goal_distances(&self, costs: &[u64]) -> Vec<Option<u64>> {
-        assert_eq!(costs.len(), self.num_labels, "one cost per label");
-        let mut reverse: Vec<Vec<(usize, u64)>> = vec![Vec::new(); self.num_states];
-        for t in &self.transitions {
-            if t.src != t.dst {
-                reverse[t.dst].push((t.src, costs[t.label]));
-            }
-        }
         dijkstra(
-            &reverse,
+            &self.adjacency(costs, true),
             self.goal.iter().enumerate().filter(|g| *g.1).map(|g| g.0),
         )
     }
 
     /// Cheapest cost from the initial state to each state.
     pub fn init_distances(&self, costs: &[u64]) -> Vec<Option<u64>> {
-        let mut forward: Vec<Vec<(usize, u64)>> = vec![Vec::new(); self.num_states];
-        for t in &self.transitions {
-            if t.src != t.dst {
-                forward[t.src].push((t.dst, costs[t.label]));
-            }
+        dijkstra(&self.adjacency(costs, false), self.initial)
+    }
+
+    /// Weighted edges per state, without self-loops; `reverse` follows
+    /// transitions backwards.
+    fn adjacency(&self, costs: &[u64], reverse: bool) -> Vec<Vec<(usize, u64)>> {
+        assert_eq!(costs.len(), self.num_labels, "one cost per label");
+        let mut adj = vec![Vec::new(); self.num_states];
+        for t in self.transitions.iter().filter(|t| t.src != t.dst) {
+            let (from, to) = if reverse {
+                (t.dst, t.src)
+            } else {
+                (t.src, t.dst)
+            };
+            adj[from].push((to, costs[t.label]));
         }
-        dijkstra(&forward, self.initial)
+        adj
     }
 
     /// Sorts transitions and removes duplicates.
