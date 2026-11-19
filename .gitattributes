@@ -1,0 +1,2 @@
+# Round-trip tests compare output.sas byte for byte; never convert line endings.
+*.sas -text
