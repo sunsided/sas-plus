@@ -16,14 +16,13 @@ pr_branch_prefix = "release/"
 custom_minor_increment_regex = "^(Add|Introduce|Support|Allow|Implement|Expose)\\b"
 # `Break` only as the subject's first word; `BREAKING CHANGE:` on any line.
 custom_major_increment_regex = "\\ABreak\\b|(?m:^BREAKING CHANGE:)"
-# Tag names: release-plz defaults to "v{{ version }}" with one public crate and
-# "{{ package }}-v{{ version }}" with several. Leave unset to keep those defaults.
+# publish-crates-io.yml only triggers on vX.Y.Z tags. Pinned, because release-plz would switch
+# to "{{ package }}-v{{ version }}" once the workspace has a second package.
+git_tag_name = "v{{ version }}"
 
 [changelog]
 commit_parsers = [
   { message = "^(Merge|Release|Bump version)\\b", skip = true },
-  # Dependabot subjects carry an ecosystem prefix (templates/.github/dependabot.yml).
-  { message = "^Actions: ", skip = true },
   { message = "^(Add|Introduce|Support|Allow|Implement|Expose)\\b", group = "Added" },
   { message = "^(Fix|Correct|Resolve|Prevent|Repair)\\b", group = "Fixed" },
   { message = "^Deprecate\\b", group = "Deprecated" },
