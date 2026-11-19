@@ -74,6 +74,8 @@ tasks:
         msg: "target missing — rustup target add thumbv7em-none-eabihf"
     cmds:
       - cargo build --lib --target thumbv7em-none-eabihf
+      - cargo build --lib --target thumbv7em-none-eabihf --no-default-features
+      - cargo build --lib --target thumbv7em-none-eabihf --all-features
 
   build:msrv:
     desc: Build the library with the minimum supported Rust version (1.85)
@@ -81,7 +83,7 @@ tasks:
       - sh: rustup run 1.85 rustc --version >/dev/null 2>&1
         msg: "Rust 1.85 missing — rustup toolchain install 1.85"
     cmds:
-      - cargo +1.85 build --lib
+      - cargo +1.85 build --lib --all-features
 
   ci:
     desc: Run what CI runs
