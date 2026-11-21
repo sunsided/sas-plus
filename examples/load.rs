@@ -9,6 +9,8 @@ use sas_plus::fdr::SasFile;
 /// About 100 MB of transitions.
 const MAX_TRANSITIONS: usize = 1 << 22;
 
+/// Loads the file named by the first argument, prints its size and, for small
+/// tasks, the optimal plan cost.
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = std::env::args().nth(1).ok_or("usage: load <output.sas>")?;
     let file: SasFile = std::fs::read_to_string(&path)?.parse()?;

@@ -3,14 +3,33 @@ name = "sas-plus"
 description = "Minimal SAS+ planning task representation, labeled transition systems and abstractions"
 version = "0.2.1"
 edition = "2024"
+authors = ["Markus Mayer <widemeadows@gmail.com>"]
 license = "MIT OR Apache-2.0"
 rust-version = "1.85"
 repository = "https://github.com/sunsided/sas-plus"
 readme = "README.md"
 keywords = ["planning", "sas", "pddl", "fast-downward", "heuristic"]
 categories = ["algorithms", "science", "no-std"]
-# GPL-2.0 / Apache-2.0 test inputs; see tests/fixtures/translated/README.md
-exclude = ["tests/fixtures/translated", "tests/translated.rs", "benches", "fuzz"]
+exclude = [
+    # GPL-2.0 / Apache-2.0 test inputs; see tests/fixtures/translated/README.md
+    "tests/fixtures/translated",
+    "tests/translated.rs",
+    # Covers only those fixtures; the crate itself has no GPL code.
+    "LICENSES/GPL-2.0-or-later.txt",
+    "benches",
+    "fuzz",
+    # Repository tooling stays out of the published crate.
+    ".github/",
+    "scripts/",
+    ".pre-commit-config.yaml",
+    "Taskfile.dist.yaml",
+    "_typos.toml",
+    "clippy.toml",
+    "codecov.yml",
+    "deny.toml",
+    "release-plz.toml",
+    "rustfmt.toml",
+]
 
 [features]
 default = ["fdr", "random"]
@@ -26,6 +45,7 @@ serde = { version = "1.0.200", default-features = false, features = ["alloc", "d
 
 [dev-dependencies]
 criterion = { version = "0.8", default-features = false }
+proptest = "1.11"
 
 [[bench]]
 name = "construction"
@@ -38,3 +58,22 @@ required-features = ["fdr"]
 
 [package.metadata.docs.rs]
 all-features = true
+rustdoc-args = ["--html-in-header", "docs/mermaid.html"]
+
+[lints.rust]
+missing_docs = "warn"
+unsafe_code = "forbid"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+mod_module_files = "deny"
+missing_docs_in_private_items = "warn"
+allow_attributes = "warn"
+allow_attributes_without_reason = "warn"
+undocumented_unsafe_blocks = "warn"
+multiple_unsafe_ops_per_block = "warn"
+cognitive_complexity = "warn"
+
+[lints.rustdoc]
+broken_intra_doc_links = "deny"
+private_intra_doc_links = "allow"

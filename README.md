@@ -1,5 +1,13 @@
 # sas-plus
 
+[![crates.io](https://img.shields.io/crates/v/sas-plus.svg)](https://crates.io/crates/sas-plus)
+[![docs.rs](https://img.shields.io/docsrs/sas-plus)](https://docs.rs/sas-plus)
+[![CI](https://github.com/sunsided/sas-plus/actions/workflows/ci.yml/badge.svg)](https://github.com/sunsided/sas-plus/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/sunsided/sas-plus/graph/badge.svg)](https://codecov.io/gh/sunsided/sas-plus)
+[![MSRV](https://img.shields.io/crates/msrv/sas-plus)](https://crates.io/crates/sas-plus)
+[![License](https://img.shields.io/crates/l/sas-plus)](https://github.com/sunsided/sas-plus#license)
+[![unsafe forbidden](https://img.shields.io/badge/unsafe-forbidden-success.svg)](https://github.com/rust-secure-code/safety-dance/)
+
 SAS+ / finite-domain planning tasks for Rust, **compatible with Fast Downward's translator**.
 
 ## What is SAS+?
@@ -23,20 +31,37 @@ For testing, `Task::perfect_heuristic()` computes the exact goal distance h\* on
 
 There is no search algorithm and no PDDL parser. To ground PDDL in Rust, see the roadmap.
 
+## Installation
+
+```sh
+cargo add sas-plus
+```
+
+Or in `Cargo.toml`:
+
+```toml
+[dependencies]
+sas-plus = "0.2"
+```
+
 ## Usage
 
 Ground PDDL with Fast Downward's translator, then load the result in Rust:
 
-```rust
+```rust,no_run
 use sas_plus::fdr::SasFile;
 
-let file: SasFile = std::fs::read_to_string("output.sas")?.parse()?;
-let task = file.to_task();               // Task with conditional effects and axioms
-// ... search ...
-print!("{}", file.format_plan(&plan));   // sas_plan format, ready for VAL
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let file: SasFile = std::fs::read_to_string("output.sas")?.parse()?;
+    let task = file.to_task(); // Task with conditional effects and axioms
+    println!("{} operators", task.operators.len());
+    let plan = Vec::new(); // ... your search over `task` ...
+    print!("{}", file.format_plan(&plan)); // sas_plan format, ready for VAL
+    Ok(())
+}
 ```
 
-To try both steps with Docker and [Task](https://taskfile.dev), run `task ground:load`. It grounds a fixture with the `aibasel/downward` image and loads the result with `examples/load.rs`. Pass `DOMAIN=... PROBLEM=...` to ground your own PDDL (paths inside the repository).
+To try both steps with Docker and [Task](https://taskfile.dev), run `task ground:load`. It grounds a fixture with the `aibasel/downward` image and loads the result with [`examples/load.rs`](https://github.com/sunsided/sas-plus/blob/main/examples/load.rs). Pass `DOMAIN=... PROBLEM=...` to ground your own PDDL (paths inside the repository).
 
 ## What's in it
 - **`fdr`**: reader and writer for `output.sas` (file version 3).
@@ -63,9 +88,28 @@ Use `default-features = false` if you only need the task model.
 - `tests/fixtures/`: small hand-encoded files, including a minimal axiom (derived-variable) example.
 
 ## Testing
-- `task test`: unit, fixture and property tests. `tests/properties.rs` checks on random tasks, with conditional effects and axioms, that projections simulate every concrete transition and never overestimate, and that `perfect_heuristic` satisfies the Bellman equation.
-- `task fuzz`: fuzzes the `output.sas` reader with [cargo-fuzz](https://github.com/rust-fuzz/cargo-fuzz) (nightly). Accepted input must round-trip and convert to a task that `validate` rejects or that steps without panics.
+- `task test`: unit, fixture and property tests. `tests/it/properties.rs` checks on random tasks, with conditional effects and axioms, that projections simulate every concrete transition and never overestimate, and that `perfect_heuristic` satisfies the Bellman equation. `tests/it/proptests.rs` runs [proptest](https://crates.io/crates/proptest) over arbitrary seeds and generator parameters; `task test:prop` raises it to 10000 cases.
+- `task fuzz`: fuzzes the `output.sas` reader with [cargo-fuzz](https://github.com/rust-fuzz/cargo-fuzz) (nightly), seeded with the fixtures. Accepted input must round-trip and convert to a task that `validate` rejects or that steps without panics. A second target, `projection`, checks that projections of arbitrary random tasks never overestimate h\*. `task fuzz:smoke` runs both briefly.
 - `task bench`: [criterion](https://crates.io/crates/criterion) benchmarks for parsing, projections and the perfect heuristic on translator output.
 
 ## Roadmap
 - A PDDL bridge in the pure-Rust [`pddl`](https://crates.io/crates/pddl) crate, behind its optional `sas-plus` feature, that grounds PDDL into an `fdr::SasFile`.
+
+## Minimum supported Rust version
+
+The library builds with Rust 1.85 (`rust-version` in `Cargo.toml`), with and without default features, and on `no_std` targets. Tests, benchmarks and fuzzing use current stable or nightly. Raising the MSRV is a minor release.
+
+## Contributing
+
+See [CONTRIBUTING.md](https://github.com/sunsided/sas-plus/blob/main/CONTRIBUTING.md). `task ci` runs what CI runs.
+
+## License
+
+Licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](https://github.com/sunsided/sas-plus/blob/main/LICENSE-APACHE) or <https://www.apache.org/licenses/LICENSE-2.0>)
+- MIT license ([LICENSE-MIT](https://github.com/sunsided/sas-plus/blob/main/LICENSE-MIT) or <https://opensource.org/licenses/MIT>)
+
+at your option. The example in [`examples/`](https://github.com/sunsided/sas-plus/tree/main/examples) is public domain ([CC0-1.0](https://github.com/sunsided/sas-plus/blob/main/LICENSES/CC0-1.0.txt)). The third-party fixtures in [`tests/fixtures/translated/`](https://github.com/sunsided/sas-plus/tree/main/tests/fixtures/translated) keep their own licenses (GPL-2.0-or-later and Apache-2.0) and are not part of the published crate. [`REUSE.toml`](https://github.com/sunsided/sas-plus/blob/main/REUSE.toml) lists the license of every file.
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
