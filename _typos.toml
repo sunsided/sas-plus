@@ -1,0 +1,17 @@
+# https://github.com/crate-ci/typos/blob/master/docs/reference.md
+[files]
+extend-exclude = [
+  "*.lock",
+  "fuzz/corpus/**",
+  "fuzz/artifacts/**",
+  "**/proptest-regressions/**",
+  "LICENSES/**",
+  "LICENSE-*",
+  # Translator output and third-party PDDL, compared byte for byte and kept unchanged.
+  "tests/fixtures/**",
+]
+
+[default.extend-words]
+# Project-specific words typos flags wrongly, e.g. `ser = "ser"`. Keep each entry justified.
+
+[default.extend-identifiers]

@@ -170,6 +170,14 @@ tasks:
     cmds:
       - cargo doc --workspace --all-features --no-deps --document-private-items
 
+  deny:
+    desc: Check advisories, licenses, bans and sources
+    preconditions:
+      - sh: cargo deny --version
+        msg: "cargo-deny not found - cargo install --locked cargo-deny"
+    cmds:
+      - cargo deny --all-features check
+
   msrv:
     desc: Check the library on its declared rust-version (library only; dev-dependencies may need newer Rust)
     aliases: [build:msrv]
@@ -223,6 +231,7 @@ tasks:
       - task: lint
       - task: doc
       - task: test
+      - task: deny
       - task: build:no-std
       - task: msrv
 
