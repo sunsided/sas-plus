@@ -11,6 +11,19 @@
 //! Tasks come from Fast Downward's translator via `fdr::SasFile` (the
 //! `output.sas` format, feature `fdr`), from your own grounder, or from
 //! `random` for tests (feature `random`).
+//!
+//! ```mermaid
+//! flowchart LR
+//!     pddl[PDDL] -->|Fast Downward translator| sas[output.sas]
+//!     sas -->|SasFile::parse| file[fdr::SasFile]
+//!     file -->|to_task| task[Task]
+//!     grounder[your grounder] --> task
+//!     random[random::random_task] --> task
+//!     task -->|Projection::new| proj[Projection]
+//!     proj -->|Abstraction::lts| lts[LabeledTransitionSystem]
+//!     lts -->|goal_distances| h[admissible estimates]
+//!     task -->|perfect_heuristic| hstar[exact h*]
+//! ```
 
 #![no_std]
 
@@ -24,6 +37,11 @@ mod projection;
 #[cfg(feature = "random")]
 pub mod random;
 mod ranking;
+
+/// Doctests for the code examples in README.md (not part of the API).
+#[cfg(all(doctest, feature = "fdr"))]
+#[doc = include_str!("../README.md")]
+mod readme_doctests {}
 
 pub use causal_graph::CausalGraph;
 pub use lts::{LabeledTransitionSystem, Transition};

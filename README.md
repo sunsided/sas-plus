@@ -27,13 +27,17 @@ There is no search algorithm and no PDDL parser. To ground PDDL in Rust, see the
 
 Ground PDDL with Fast Downward's translator, then load the result in Rust:
 
-```rust
+```rust,no_run
 use sas_plus::fdr::SasFile;
 
-let file: SasFile = std::fs::read_to_string("output.sas")?.parse()?;
-let task = file.to_task();               // Task with conditional effects and axioms
-// ... search ...
-print!("{}", file.format_plan(&plan));   // sas_plan format, ready for VAL
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let file: SasFile = std::fs::read_to_string("output.sas")?.parse()?;
+    let task = file.to_task(); // Task with conditional effects and axioms
+    println!("{} operators", task.operators.len());
+    let plan = Vec::new(); // ... your search over `task` ...
+    print!("{}", file.format_plan(&plan)); // sas_plan format, ready for VAL
+    Ok(())
+}
 ```
 
 To try both steps with Docker and [Task](https://taskfile.dev), run `task ground:load`. It grounds a fixture with the `aibasel/downward` image and loads the result with `examples/load.rs`. Pass `DOMAIN=... PROBLEM=...` to ground your own PDDL (paths inside the repository).
