@@ -6,6 +6,7 @@ use sas_plus::{Abstraction, Projection, State, Task, Transition};
 
 const SEEDS: u64 = 200;
 
+/// Generator parameters for `seed`: conditional effects and derived variables cycle with it.
 fn params(seed: u64) -> RandomTaskParams {
     RandomTaskParams {
         max_conditions: (seed % 3) as usize,
@@ -19,19 +20,21 @@ fn random_state(task: &Task, rng: &mut Rng) -> State {
     let mut s = State(
         task.variables
             .iter()
-            .map(|v| rng.range(0, u64::from(v.domain_size) - 1) as u32)
+            .map(|v| u32::try_from(rng.range(0, u64::from(v.domain_size) - 1)).unwrap())
             .collect(),
     );
     task.evaluate_axioms(&mut s);
     s
 }
 
+/// A pattern with each variable of `task` included with probability 1/2.
 fn random_pattern(task: &Task, rng: &mut Rng) -> Vec<usize> {
     (0..task.num_variables())
         .filter(|_| rng.range(0, 1) == 1)
         .collect()
 }
 
+/// Generated tasks validate, and the seed range covers plenty of axioms.
 #[test]
 fn generated_tasks_are_valid() {
     let mut derived = 0;
@@ -101,14 +104,17 @@ fn projections_are_admissible_in_every_state() {
     for seed in 0..SEEDS {
         let task = random_task(seed, params(seed));
         let h_star = task.perfect_heuristic();
-        let p = Projection::new(&task, random_pattern(&task, &mut rng));
-        let h = p.lts().goal_distances(&task.costs());
+        let projection = Projection::new(&task, random_pattern(&task, &mut rng));
+        let distances = projection.lts().goal_distances(&task.costs());
         for _ in 0..20 {
-            let s = random_state(&task, &mut rng);
-            let abstract_h = h[p.abstract_state(&s).unwrap()];
-            match (abstract_h, h_star(&s)) {
-                (Some(a), Some(b)) => assert!(a <= b, "seed {seed}: {a} > {b} in {s:?}"),
-                (None, Some(_)) => panic!("seed {seed}: projection prunes solvable {s:?}"),
+            let state = random_state(&task, &mut rng);
+            let estimate = distances[projection.abstract_state(&state).unwrap()];
+            match (estimate, h_star(&state)) {
+                (Some(estimate), Some(optimal)) => assert!(
+                    estimate <= optimal,
+                    "seed {seed}: {estimate} > {optimal} in {state:?}"
+                ),
+                (None, Some(_)) => panic!("seed {seed}: projection prunes solvable {state:?}"),
                 (_, None) => {}
             }
         }
