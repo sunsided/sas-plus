@@ -29,7 +29,7 @@ jobs:
             echo "::error::$GITHUB_REF_NAME points at a commit that is not on main"
             exit 1
           fi
-      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
         with:
           toolchain: stable
           components: clippy
@@ -39,7 +39,7 @@ jobs:
       # The published guarantees: no_std with and without default features, and the MSRV.
       - run: cargo build --lib --target thumbv7em-none-eabihf --no-default-features
       - run: cargo build --lib --target thumbv7em-none-eabihf --all-features
-      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
         with:
           toolchain: '1.85'
       - run: cargo +1.85 build --lib --all-features
@@ -58,7 +58,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
         with:
           toolchain: stable
       - name: Resolve crate and version from the tag

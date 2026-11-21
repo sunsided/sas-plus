@@ -1,3 +1,7 @@
+# https://taskfile.dev
+# Keep `ci` in sync with .github/workflows/ci.yml: same checks, same flags. Two jobs stay out:
+# coverage only matters for the upload (`task coverage`), and semver needs the crates.io
+# baseline (`task semver`).
 version: '3'
 
 vars:
@@ -6,6 +10,20 @@ vars:
   DOMAIN: '{{ .DOMAIN | default "tests/fixtures/translated/gripper-costs/domain.pddl" }}'
   PROBLEM: '{{ .PROBLEM | default "tests/fixtures/translated/gripper-costs/problem.pddl" }}'
   SAS_FILE: '{{ .SAS_FILE | default "target/ground/output.sas" }}'
+  # Bare-metal target for the no_std builds.
+  NO_STD_TARGET: thumbv7em-none-eabihf
+  # Prefer cargo-nextest when installed; fall back to cargo test.
+  NEXTEST:
+    sh: cargo nextest --version >/dev/null 2>&1 && echo yes || echo no
+  # Doctests need a library target; binary-only crates have none.
+  HAS_LIB:
+    sh: cargo metadata --no-deps --format-version 1 | grep -qE '"kind":\[[^]]*"(lib|rlib|proc-macro)"' && echo yes || echo no
+  # Branching model checked by lint:branch: github (main + feature/) or gitflow.
+  BRANCH_FLOW: github
+
+env:
+  # Newer nextest fails when a crate has no tests; warn instead (ignored by older versions).
+  NEXTEST_NO_TESTS: warn
 
 tasks:
   default:
@@ -36,25 +54,155 @@ tasks:
     cmds:
       - cargo run --quiet --example load -- '{{.SAS_FILE}}'
 
+  build:
+    desc: Build all targets (benches and examples included)
+    cmds:
+      - cargo build --workspace --all-targets --all-features {{.CLI_ARGS}}
+
+  build:no-std:
+    desc: Build the library for a bare-metal target without std (default, no and all features)
+    preconditions:
+      - sh: rustup target list --installed | grep -q {{.NO_STD_TARGET}}
+        msg: "target missing - rustup target add {{.NO_STD_TARGET}}"
+    cmds:
+      - cargo build --lib --target {{.NO_STD_TARGET}}
+      - cargo build --lib --target {{.NO_STD_TARGET}} --no-default-features
+      - cargo build --lib --target {{.NO_STD_TARGET}} --all-features
+
+  test:
+    desc: Run tests (nextest if installed, cargo test otherwise), then doctests
+    cmds:
+      - cmd: cargo nextest run --workspace --all-features {{.CLI_ARGS}}
+        if: '[ "{{.NEXTEST}}" = "yes" ]'
+      - cmd: cargo test --workspace --all-targets --all-features {{.CLI_ARGS}}
+        if: '[ "{{.NEXTEST}}" = "no" ]'
+      - task: test:doc
+
+  test:doc:
+    desc: Run doctests (nextest does not run them; skipped for binary-only crates)
+    aliases: [test:docs]
+    cmds:
+      - cmd: cargo test --workspace --all-features --doc
+        if: '[ "{{.HAS_LIB}}" = "yes" ]'
+
   fmt:
-    desc: Check formatting
+    desc: Format all Rust sources
+    cmds:
+      - cargo fmt --all
+
+  fmt:check:
+    desc: Check formatting without modifying files
     cmds:
       - cargo fmt --all --check
 
   lint:
-    desc: Run clippy
+    desc: Run all linters
     cmds:
-      - cargo clippy --all-targets --all-features -- -D warnings
+      - task: lint:clippy
+      - task: lint:separators
+      - task: lint:readme
+      - task: lint:typos
+      - task: lint:mermaid
+      - task: lint:actions
 
-  test:
-    desc: Run the test suite
+  lint:clippy:
+    desc: Clippy (pedantic, warnings as errors)
     cmds:
-      - cargo test --all-features {{.CLI_ARGS}}
+      - cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+  lint:fix:
+    desc: Auto-fix clippy findings and typos, then format (review the diff)
+    cmds:
+      - cargo clippy --workspace --all-targets --all-features --fix --allow-dirty --allow-staged
+      - typos --write-changes
+      - task: fmt
+
+  lint:separators:
+    desc: Fail on `// ----` style separator comments (split the file into modules instead)
+    cmds:
+      - "! grep -rnE --include='*.rs' --exclude-dir=target --exclude-dir=.git '^[[:space:]]*//+[[:space:]]*[-=*#~_/]{4,}' ."
+
+  lint:readme:
+    desc: Fail on relative links or images in README files (crates.io needs absolute URLs)
+    cmds:
+      # `if` instead of `! a | b`: Task's shell does not negate pipelines like bash does.
+      - |
+        if grep -rnoE --include='README.md' --exclude-dir=target --exclude-dir=.git '(\]\(|src=")[^)"]*' . \
+          | grep -vE ':(\]\(|src=")(https?://|#|mailto:)'; then
+          echo "use absolute URLs for these links: crates.io and docs.rs render READMEs outside GitHub"
+          exit 1
+        fi
+
+  lint:typos:
+    desc: Spell-check code and docs
+    preconditions:
+      - sh: command -v typos
+        msg: "typos not found - cargo install --locked typos-cli"
+    cmds:
+      - typos
+
+  lint:mermaid:
+    desc: Render every mermaid diagram (Markdown and doc comments) to catch broken ones
+    cmds:
+      # Passes without mermaid-cli when there are no diagrams; set MMDC to override the command.
+      - python3 scripts/lint-mermaid.py
+
+  lint:branch:
+    desc: Check the branch name against the branching model (BRANCH=..., default current)
+    cmds:
+      - sh scripts/check-branch.sh "{{.BRANCH}}" "{{.BRANCH_FLOW}}"
+
+  lint:actions:
+    desc: Lint GitHub Actions workflows (actionlint + zizmor)
+    preconditions:
+      - sh: command -v uvx
+        msg: "uvx not found - https://docs.astral.sh/uv/getting-started/installation/"
+    cmds:
+      # Run through uvx, not a local install: the snap build cannot read repos outside $HOME.
+      - uvx --from actionlint-py actionlint
+      - uvx zizmor .github/
+
+  doc:
+    desc: Build docs including private items, warnings as errors
+    aliases: [docs]
+    env:
+      RUSTDOCFLAGS: -D warnings
+    cmds:
+      - cargo doc --workspace --all-features --no-deps --document-private-items
+
+  msrv:
+    desc: Check the library on its declared rust-version (library only; dev-dependencies may need newer Rust)
+    aliases: [build:msrv]
+    preconditions:
+      - sh: cargo hack --version
+        msg: "cargo-hack not found - cargo install --locked cargo-hack"
+    cmds:
+      - cargo hack check --rust-version --workspace --ignore-private --all-features
+
+  semver:
+    desc: Check the published library crate for semver violations
+    preconditions:
+      - sh: cargo semver-checks --version
+        msg: "cargo-semver-checks not found - cargo install --locked cargo-semver-checks"
+    cmds:
+      - cargo semver-checks --workspace
+
+  coverage:
+    desc: Coverage report (lcov.info, gitignored; HTML with -- --html)
+    preconditions:
+      - sh: cargo llvm-cov --version
+        msg: "cargo-llvm-cov not found - cargo install --locked cargo-llvm-cov"
+    cmds:
+      - cmd: cargo llvm-cov nextest --workspace --all-features --lcov --output-path lcov.info {{.CLI_ARGS}}
+        if: '[ "{{.NEXTEST}}" = "yes" ]'
+      - cmd: cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info {{.CLI_ARGS}}
+        if: '[ "{{.NEXTEST}}" = "no" ]'
 
   bench:
-    desc: Run the benchmarks (parsing, projections, perfect heuristic)
+    desc: "Run the benchmarks: parsing, projections, perfect heuristic (criterion flags after --: task bench -- --quick)"
     cmds:
-      - cargo bench --bench construction {{.CLI_ARGS}}
+      # --bench '*': only [[bench]] targets (--benches would include lib harnesses that reject criterion flags).
+      - cargo bench --workspace --bench '*' -- {{.CLI_ARGS}}
 
   fuzz:
     desc: Fuzz the output.sas reader (needs nightly and cargo-fuzz); default 5 minutes
@@ -67,29 +215,19 @@ tasks:
       - for f in ../tests/fixtures/*/output.sas ../tests/fixtures/translated/*/output.sas; do cp "$f" "corpus/parse/$(basename "$(dirname "$f")").sas"; done
       - cargo +nightly fuzz run parse corpus/parse -- -max_total_time={{.SECONDS | default 300}} -max_len=8192
 
-  build:no-std:
-    desc: Build the library for a bare-metal target without std
-    preconditions:
-      - sh: rustup target list --installed | grep -q thumbv7em-none-eabihf
-        msg: "target missing — rustup target add thumbv7em-none-eabihf"
-    cmds:
-      - cargo build --lib --target thumbv7em-none-eabihf
-      - cargo build --lib --target thumbv7em-none-eabihf --no-default-features
-      - cargo build --lib --target thumbv7em-none-eabihf --all-features
-
-  build:msrv:
-    desc: Build the library with the minimum supported Rust version (1.85)
-    preconditions:
-      - sh: rustup run 1.85 rustc --version >/dev/null 2>&1
-        msg: "Rust 1.85 missing — rustup toolchain install 1.85"
-    cmds:
-      - cargo +1.85 build --lib --all-features
-
   ci:
-    desc: Run what CI runs
+    desc: Run the CI checks locally (mirrors .github/workflows/ci.yml except coverage and semver)
     cmds:
-      - task: fmt
+      - task: lint:branch
+      - task: fmt:check
       - task: lint
+      - task: doc
       - task: test
       - task: build:no-std
-      - task: build:msrv
+      - task: msrv
+
+  clean:
+    desc: Remove build output
+    cmds:
+      - cargo clean
+      - rm -f lcov.info
