@@ -29,7 +29,14 @@ Because the variables capture mutual exclusion directly, many heuristics (patter
 
 For testing, `Task::perfect_heuristic()` computes the exact goal distance h\* on small tasks, and `random::random_task` generates reproducible tasks from a seed, so a heuristic can be checked against h\* over as many seeds as you care to run. On top of that, the `fdr` module reads Fast Downward's translator output, which brings real benchmark domains in without writing a grounder.
 
-There is no search algorithm and no PDDL parser. To ground PDDL in Rust, see the roadmap.
+There is no search algorithm and no PDDL parser. To ground PDDL in pure Rust, the [pddl](https://github.com/sunsided/pddl-rs) crate's `sas-plus` feature grounds a domain and problem into an `fdr::SasFile`.
+
+## Who this is for
+
+- Authors of planning heuristics and search algorithms who want one plain, validated task model to build on, with Fast Downward's translator output as a source of real benchmark domains.
+- Researchers who need ground truth while developing a heuristic: `perfect_heuristic` and the seeded random tasks turn admissibility checks into ordinary property tests.
+- Teams that plan on embedded or robotic hardware: the task model, projections and transition systems are `no_std` with `alloc` and have no required dependencies.
+- Anyone who wants ready-made heuristics rather than the building blocks should look at [planning-heuristics](https://github.com/sunsided/planning-heuristics), [merge-and-shrink](https://github.com/sunsided/merge-and-shrink) and [cost-partition](https://github.com/sunsided/cost-partition); for search over a `Task`, see [heuristic-search](https://github.com/sunsided/heuristic-search), [symbolic-search](https://github.com/sunsided/symbolic-search) and [decoupled-search](https://github.com/sunsided/decoupled-search).
 
 ## Installation
 
@@ -91,9 +98,6 @@ Use `default-features = false` if you only need the task model.
 - `task test`: unit, fixture and property tests. `tests/it/properties.rs` checks on random tasks, with conditional effects and axioms, that projections simulate every concrete transition and never overestimate, and that `perfect_heuristic` satisfies the Bellman equation. `tests/it/proptests.rs` runs [proptest](https://crates.io/crates/proptest) over arbitrary seeds and generator parameters; `task test:prop` raises it to 10000 cases.
 - `task fuzz`: fuzzes the `output.sas` reader with [cargo-fuzz](https://github.com/rust-fuzz/cargo-fuzz) (nightly), seeded with the fixtures. Accepted input must round-trip and convert to a task that `validate` rejects or that steps without panics. A second target, `projection`, checks that projections of arbitrary random tasks never overestimate h\*. `task fuzz:smoke` runs both briefly.
 - `task bench`: [criterion](https://crates.io/crates/criterion) benchmarks for parsing, projections and the perfect heuristic on translator output.
-
-## Roadmap
-- A PDDL bridge in the pure-Rust [`pddl`](https://crates.io/crates/pddl) crate, behind its optional `sas-plus` feature, that grounds PDDL into an `fdr::SasFile`.
 
 ## Minimum supported Rust version
 

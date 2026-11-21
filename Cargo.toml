@@ -1,6 +1,6 @@
 [package]
 name = "sas-plus"
-description = "Minimal SAS+ planning task representation, labeled transition systems and abstractions"
+description = "SAS+ / finite-domain planning tasks compatible with Fast Downward's translator, with labeled transition systems, projections and test oracles"
 version = "0.2.1"
 edition = "2024"
 authors = ["Markus Mayer <widemeadows@gmail.com>"]
@@ -9,7 +9,7 @@ rust-version = "1.85"
 repository = "https://github.com/sunsided/sas-plus"
 readme = "README.md"
 keywords = ["planning", "sas", "pddl", "fast-downward", "heuristic"]
-categories = ["algorithms", "science", "no-std"]
+categories = ["algorithms", "artificial-intelligence", "science", "parser-implementations", "no-std"]
 exclude = [
     # GPL-2.0 / Apache-2.0 test inputs; see tests/fixtures/translated/README.md
     "tests/fixtures/translated",

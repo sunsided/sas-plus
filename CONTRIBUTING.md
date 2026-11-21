@@ -24,10 +24,7 @@ needs before it can be merged.
 4. Install the git hooks with [prek](https://prek.j178.dev/) (`prek install`), or with
    `pre-commit install`. Fast checks run on commit; clippy and tests run on push.
 
-`Cargo.lock` is not tracked. The planning crates are developed side by side, and dependent
-crates build against this working tree through an untracked `[patch.crates-io]` file in the
-parent directory (`../.cargo/config.toml`), which rewrites lock files on every build. CI
-resolves from crates.io.
+`Cargo.lock` is not tracked: this is a library, and CI resolves from crates.io.
 
 ## Everyday commands
 
