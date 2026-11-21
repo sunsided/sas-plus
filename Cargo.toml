@@ -33,6 +33,7 @@ serde = { version = "1.0.200", default-features = false, features = ["alloc", "d
 
 [dev-dependencies]
 criterion = { version = "0.8", default-features = false }
+proptest = "1.11"
 
 [[bench]]
 name = "construction"

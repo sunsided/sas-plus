@@ -9,4 +9,6 @@ mod fdr;
 #[cfg(feature = "random")]
 mod properties;
 #[cfg(feature = "random")]
+mod proptests;
+#[cfg(feature = "random")]
 mod task;

@@ -4,6 +4,12 @@
 # baseline (`task semver`).
 version: '3'
 
+includes:
+  fuzz:
+    taskfile: fuzz/Taskfile.dist.yaml
+    dir: fuzz
+    optional: true
+
 vars:
   # Any task from tests/fixtures/translated/ works; override with
   # `task ground DOMAIN=... PROBLEM=...`.
@@ -55,9 +61,10 @@ tasks:
       - cargo run --quiet --example load -- '{{.SAS_FILE}}'
 
   build:
-    desc: Build all targets (benches and examples included)
+    desc: Build all targets (benches and examples included), then the fuzz targets
     cmds:
       - cargo build --workspace --all-targets --all-features {{.CLI_ARGS}}
+      - task: fuzz:build
 
   build:no-std:
     desc: Build the library for a bare-metal target without std (default, no and all features)
@@ -85,10 +92,19 @@ tasks:
       - cmd: cargo test --workspace --all-features --doc
         if: '[ "{{.HAS_LIB}}" = "yes" ]'
 
+  test:prop:
+    desc: Run property tests with a high case count (PROPTEST_CASES, default 10000)
+    env:
+      PROPTEST_CASES: '{{.PROPTEST_CASES | default "10000"}}'
+    cmds:
+      # A nested `task` process inherits env; `task: test` would not.
+      - task test
+
   fmt:
     desc: Format all Rust sources
     cmds:
       - cargo fmt --all
+      - task: fuzz:fmt
 
   fmt:check:
     desc: Check formatting without modifying files
@@ -213,7 +229,7 @@ tasks:
       - cargo bench --workspace --bench '*' -- {{.CLI_ARGS}}
 
   fuzz:
-    desc: Fuzz the output.sas reader (needs nightly and cargo-fuzz); default 5 minutes
+    desc: Fuzz the output.sas reader from the fixture corpus (needs nightly and cargo-fuzz); default 5 minutes
     dir: fuzz
     preconditions:
       - sh: cargo +nightly fuzz --version >/dev/null 2>&1
@@ -234,9 +250,12 @@ tasks:
       - task: deny
       - task: build:no-std
       - task: msrv
+      - task: fuzz:build
+      - task: fuzz:lint
 
   clean:
-    desc: Remove build output
+    desc: Remove build output, including fuzz builds (keeps fuzz corpora and crash artifacts)
     cmds:
       - cargo clean
+      - task: fuzz:clean
       - rm -f lcov.info

@@ -4,6 +4,7 @@
 //! (The reader checks syntax and ranges; `Task::validate` checks semantics.)
 
 #![no_main]
+#![forbid(unsafe_code)]
 
 use libfuzzer_sys::fuzz_target;
 use sas_plus::fdr::SasFile;
