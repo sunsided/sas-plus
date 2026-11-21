@@ -1,5 +1,3 @@
-#![cfg(feature = "fdr")]
-
 use std::path::PathBuf;
 
 use sas_plus::fdr::SasFile;

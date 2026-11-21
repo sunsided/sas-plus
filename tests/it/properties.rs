@@ -1,8 +1,6 @@
 //! Properties checked on many random tasks, with conditional effects and
 //! axioms. Failures name the seed, which reproduces the task.
 
-#![cfg(feature = "random")]
-
 use sas_plus::random::{RandomTaskParams, Rng, random_task};
 use sas_plus::{Abstraction, Projection, State, Task, Transition};
 

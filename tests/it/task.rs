@@ -1,5 +1,3 @@
-#![cfg(feature = "random")]
-
 use sas_plus::random::{RandomTaskParams, Rng, random_task};
 use sas_plus::{
     Abstraction, Axiom, CausalGraph, Effect, Fact, LabeledTransitionSystem, Operator, Projection,
