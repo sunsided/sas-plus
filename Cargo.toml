@@ -10,7 +10,14 @@ readme = "README.md"
 keywords = ["planning", "sas", "pddl", "fast-downward", "heuristic"]
 categories = ["algorithms", "science", "no-std"]
 # GPL-2.0 / Apache-2.0 test inputs; see tests/fixtures/translated/README.md
-exclude = ["tests/fixtures/translated", "tests/translated.rs", "benches", "fuzz"]
+exclude = [
+    "tests/fixtures/translated",
+    "tests/translated.rs",
+    # Covers only those fixtures; the crate itself has no GPL code.
+    "LICENSES/GPL-2.0-or-later.txt",
+    "benches",
+    "fuzz",
+]
 
 [features]
 default = ["fdr", "random"]
