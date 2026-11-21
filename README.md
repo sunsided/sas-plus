@@ -6,6 +6,7 @@
 [![codecov](https://codecov.io/gh/sunsided/sas-plus/graph/badge.svg)](https://codecov.io/gh/sunsided/sas-plus)
 [![MSRV](https://img.shields.io/crates/msrv/sas-plus)](https://crates.io/crates/sas-plus)
 [![License](https://img.shields.io/crates/l/sas-plus)](https://github.com/sunsided/sas-plus#license)
+[![unsafe forbidden](https://img.shields.io/badge/unsafe-forbidden-success.svg)](https://github.com/rust-secure-code/safety-dance/)
 
 SAS+ / finite-domain planning tasks for Rust, **compatible with Fast Downward's translator**.
 
