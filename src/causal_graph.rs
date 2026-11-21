@@ -1,3 +1,5 @@
+//! The causal graph of a task ([`CausalGraph`]).
+
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -13,11 +15,20 @@ use crate::{Task, VarId};
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct CausalGraph {
+    /// Per variable, the variables it has an arc to; sorted, no duplicates.
     successors: Vec<Vec<VarId>>,
+    /// Per variable, the variables with an arc to it; sorted, no duplicates.
     predecessors: Vec<Vec<VarId>>,
 }
 
 impl CausalGraph {
+    /// Builds the causal graph of `task`.
+    ///
+    /// # Panics
+    ///
+    /// If a fact of `task` names a variable it does not have; a task that
+    /// passes [`Task::validate`] never does.
+    #[must_use]
     pub fn new(task: &Task) -> Self {
         let mut arcs = Vec::new();
         for op in &task.operators {
@@ -28,6 +39,7 @@ impl CausalGraph {
                 arcs.extend(op.eff.iter().map(|other| (other.fact.var, v)));
             }
         }
+
         for a in &task.axioms {
             arcs.extend(a.conditions.iter().map(|f| (f.var, a.head.var)));
         }
@@ -42,6 +54,7 @@ impl CausalGraph {
             successors[u].push(v);
             predecessors[v].push(u);
         }
+
         Self {
             successors,
             predecessors,
@@ -49,11 +62,21 @@ impl CausalGraph {
     }
 
     /// Variables with an arc from `var`, sorted.
+    ///
+    /// # Panics
+    ///
+    /// If `var` is not a variable of the task.
+    #[must_use]
     pub fn successors(&self, var: VarId) -> &[VarId] {
         &self.successors[var]
     }
 
     /// Variables with an arc to `var`, sorted.
+    ///
+    /// # Panics
+    ///
+    /// If `var` is not a variable of the task.
+    #[must_use]
     pub fn predecessors(&self, var: VarId) -> &[VarId] {
         &self.predecessors[var]
     }
