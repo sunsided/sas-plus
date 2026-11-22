@@ -1,7 +1,7 @@
 [package]
 name = "sas-plus"
 description = "SAS+ / finite-domain planning tasks compatible with Fast Downward's translator, with labeled transition systems, projections and test oracles"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2024"
 authors = ["Markus Mayer <widemeadows@gmail.com>"]
 license = "MIT OR Apache-2.0"
