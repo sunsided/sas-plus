@@ -4,6 +4,7 @@
 
 use sas_plus::fdr::SasFile;
 
+/// Small tasks and their optimal costs (see the fixture README).
 const SMALL: [(&str, u64); 6] = [
     ("sussman-anomaly", 3),
     ("gripper-2", 3),
@@ -26,6 +27,7 @@ const CONDITIONAL: [&str; 2] = ["courier", "get-paid4"];
 /// Tasks with derived variables and axioms.
 const DERIVED: [&str; 1] = ["wiring"];
 
+/// The text of `tests/fixtures/translated/<name>/output.sas`.
 fn read(name: &str) -> String {
     let path = format!(
         "{}/tests/fixtures/translated/{name}/output.sas",
@@ -34,6 +36,7 @@ fn read(name: &str) -> String {
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path}: {e}"))
 }
 
+/// Every translator output writes back byte for byte.
 #[test]
 fn translator_output_round_trips_byte_for_byte() {
     for name in PLAIN.iter().chain(&CONDITIONAL).chain(&DERIVED) {
@@ -43,6 +46,7 @@ fn translator_output_round_trips_byte_for_byte() {
     }
 }
 
+/// Every translator output converts to a task that passes `validate`.
 #[test]
 fn all_tasks_convert_to_valid_tasks() {
     for name in PLAIN.iter().chain(&CONDITIONAL).chain(&DERIVED) {
@@ -53,6 +57,7 @@ fn all_tasks_convert_to_valid_tasks() {
     }
 }
 
+/// The small tasks have the optimal costs listed in the fixture README.
 #[test]
 fn small_tasks_have_their_known_optimal_cost() {
     for (name, optimum) in SMALL {
@@ -65,6 +70,7 @@ fn small_tasks_have_their_known_optimal_cost() {
     }
 }
 
+/// `logistics-e` has the expected size, unit costs and no axioms.
 #[test]
 fn translator_output_shape() {
     let file = SasFile::parse(&read("logistics-e")).unwrap();
@@ -73,7 +79,7 @@ fn translator_output_shape() {
         (file.variables.len(), file.operators.len(), file.goal.len()),
         (19, 756, 11)
     );
-    assert!(file.axioms.is_empty());
+    assert_eq!(file.axioms, vec![]);
     assert!(file.variables.iter().all(|v| v.axiom_layer.is_none()));
 }
 
@@ -110,6 +116,7 @@ fn action_costs_survive_translation() {
     );
 }
 
+/// The translator keeps conditional effects, and `to_task` keeps their conditions.
 #[test]
 fn conditional_effects_survive_translation_and_conversion() {
     for name in CONDITIONAL {
@@ -168,7 +175,7 @@ fn courier_combines_action_costs_and_conditional_effects() {
 fn derived_predicates_survive_translation() {
     let file = SasFile::parse(&read("wiring")).unwrap();
     assert!(file.use_metric);
-    assert!(!file.axioms.is_empty());
+    assert_ne!(file.axioms, vec![]);
     assert!(file.variables.iter().any(|v| v.axiom_layer.is_some()));
     let task = file.to_task();
     let id = |n: &str| task.operators.iter().position(|o| o.name == n).unwrap();

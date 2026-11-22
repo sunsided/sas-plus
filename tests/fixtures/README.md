@@ -15,7 +15,7 @@ line: with metric `0`, every operator costs 1 regardless of the cost field.
 | `conditional-effects` | conditional effects, `<none of those>` value | not checked |
 | `derived-predicates` | derived variable (axiom layer 0), one axiom rule | 2 |
 
-Real translator output lives in [`translated/`](translated). To add more:
+Real translator output lives in [`translated/`](https://github.com/sunsided/sas-plus/tree/main/tests/fixtures/translated). To add more:
 
 ```bash
 fast-downward.py --translate domain.pddl problem.pddl   # writes output.sas

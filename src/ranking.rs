@@ -1,3 +1,6 @@
+//! Perfect hashing of partial assignments, shared by projections and the
+//! perfect heuristic.
+
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -7,15 +10,25 @@ use crate::{Fact, State, Task, Value, VarId};
 /// first variable varying fastest).
 #[derive(Clone, Debug)]
 pub(crate) struct Ranking {
+    /// The ranked variables, in ranking order (the first varies fastest).
     pub vars: Vec<VarId>,
+    /// Per position, the rank step of one value of that variable: the
+    /// product of the domain sizes before it.
     multipliers: Vec<usize>,
+    /// Per position, the domain size of that variable.
     domains: Vec<usize>,
     /// Position of each task variable in `vars`.
     position: Vec<Option<usize>>,
+    /// The number of ranks: the product of all domain sizes.
     pub num_states: usize,
 }
 
 impl Ranking {
+    /// Ranks the assignments to `vars` of `task`.
+    ///
+    /// # Panics
+    ///
+    /// If the product of the domain sizes overflows `usize`.
     pub fn new(task: &Task, vars: Vec<VarId>) -> Self {
         let domains: Vec<usize> = vars
             .iter()
@@ -29,10 +42,12 @@ impl Ranking {
                 .checked_mul(d)
                 .expect("state space too large to enumerate");
         }
+
         let mut position = vec![None; task.num_variables()];
         for (i, &v) in vars.iter().enumerate() {
             position[v] = Some(i);
         }
+
         Self {
             vars,
             multipliers,
@@ -42,6 +57,7 @@ impl Ranking {
         }
     }
 
+    /// The rank of the values `state` assigns to the ranked variables.
     pub fn rank(&self, state: &State) -> usize {
         self.vars
             .iter()
@@ -53,28 +69,33 @@ impl Ranking {
     /// Writes the values of rank `index` into `state`.
     pub fn unrank(&self, index: usize, state: &mut State) {
         for (i, &v) in self.vars.iter().enumerate() {
-            state.0[v] = self.value(index, i) as Value;
+            state.0[v] = self.value(index, i);
         }
     }
 
+    /// The position of task variable `var` in [`Ranking::vars`], if ranked.
     pub fn position(&self, var: VarId) -> Option<usize> {
         self.position[var]
     }
 
     /// Value of the `i`-th ranked variable in rank `index`.
-    pub fn value(&self, index: usize, i: usize) -> usize {
-        (index / self.multipliers[i]) % self.domains[i]
+    pub fn value(&self, index: usize, i: usize) -> Value {
+        let value = (index / self.multipliers[i]) % self.domains[i];
+
+        Value::try_from(value).expect("a value below a u32 domain size fits in u32")
     }
 
     /// `index` with the `i`-th ranked variable set to `value`.
     pub fn set(&self, index: usize, i: usize, value: Value) -> usize {
-        index - self.value(index, i) * self.multipliers[i] + value as usize * self.multipliers[i]
+        let old = self.value(index, i) as usize;
+
+        index - old * self.multipliers[i] + value as usize * self.multipliers[i]
     }
 
     /// Whether the facts on ranked variables hold in rank `index`; other facts are ignored.
     pub fn holds(&self, index: usize, facts: &[Fact]) -> bool {
         facts.iter().all(|f| match self.position[f.var] {
-            Some(i) => self.value(index, i) == f.value as usize,
+            Some(i) => self.value(index, i) == f.value,
             None => true,
         })
     }
@@ -90,6 +111,7 @@ impl Ranking {
                 fixed[i] = Some(f.value);
             }
         }
+
         let base: usize = (0..self.vars.len())
             .filter_map(|i| Some(fixed[i]? as usize * self.multipliers[i]))
             .sum();
@@ -104,6 +126,7 @@ impl Ranking {
             if done {
                 return None;
             }
+
             let current = index;
             done = true;
             for (d, &i) in digits.iter_mut().zip(&free) {
@@ -113,9 +136,11 @@ impl Ranking {
                     done = false;
                     break;
                 }
+
                 index -= *d * self.multipliers[i];
                 *d = 0;
             }
+
             Some(current)
         })
     }

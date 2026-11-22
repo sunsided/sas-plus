@@ -1,9 +1,8 @@
-#![cfg(feature = "fdr")]
-
 use std::path::PathBuf;
 
 use sas_plus::fdr::SasFile;
 
+/// The text of the hand-encoded fixture `tests/fixtures/<name>/output.sas`.
 fn fixture(name: &str) -> String {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures")
@@ -19,6 +18,7 @@ const ALL: [&str; 4] = [
     "derived-predicates",
 ];
 
+/// Every hand-encoded fixture writes back byte for byte.
 #[test]
 fn writes_back_exactly_what_it_reads() {
     for name in ALL {
@@ -28,6 +28,7 @@ fn writes_back_exactly_what_it_reads() {
     }
 }
 
+/// The optimal cost honors the metric flag: action costs with metric 1, unit costs with 0.
 #[test]
 fn gripper_optimal_costs_follow_the_metric() {
     for (name, optimum) in [("gripper-costs", 7), ("gripper-unit", 5)] {
@@ -45,6 +46,7 @@ fn gripper_optimal_costs_follow_the_metric() {
     }
 }
 
+/// `to_task` merges prevail conditions and effect preconditions into one precondition.
 #[test]
 fn effect_preconditions_become_operator_preconditions() {
     let file = SasFile::parse(&fixture("gripper-costs")).unwrap();
@@ -70,6 +72,7 @@ fn effect_preconditions_become_operator_preconditions() {
     );
 }
 
+/// `format_plan` writes the `sas_plan` format Fast Downward's search writes.
 #[test]
 fn format_plan_matches_fast_downward() {
     let file = SasFile::parse(&fixture("gripper-costs")).unwrap();
@@ -100,6 +103,7 @@ fn format_plan_labels_unit_costs_by_the_costs() {
     assert_eq!(file.format_plan(&[]), "; cost = 0 (unit cost)\n");
 }
 
+/// Effect conditions, derived variables and axiom rules survive `to_task`.
 #[test]
 fn conditional_effects_and_axioms_carry_over_to_the_task() {
     let file = SasFile::parse(&fixture("conditional-effects")).unwrap();
@@ -125,6 +129,7 @@ fn conditional_effects_and_axioms_carry_over_to_the_task() {
     assert_eq!(task.validate_plan(&[0, 1]), Some(2));
 }
 
+/// Malformed input is rejected with the 1-based line of the problem.
 #[test]
 fn reports_errors_with_line_numbers() {
     let text = fixture("gripper-costs");

@@ -1,11 +1,10 @@
-#![cfg(feature = "random")]
-
 use sas_plus::random::{RandomTaskParams, Rng, random_task};
 use sas_plus::{
     Abstraction, Axiom, CausalGraph, Effect, Fact, LabeledTransitionSystem, Operator, Projection,
     State, Task, TaskError, Transition, Variable,
 };
 
+/// Two binary variables `a`, `b` and one operator `a = 0 → a = 1, b = 1` (cost 1), goal `b = 1`.
 fn tiny() -> Task {
     let var = |name: &str| Variable::new(name, 2);
     Task {
@@ -38,8 +37,9 @@ fn tiny_derived() -> Task {
     t
 }
 
+/// `validate` accepts `tiny` and reports facts outside the task.
 #[test]
-fn validate_reports_each_kind_of_error() {
+fn validate_reports_state_and_fact_errors() {
     assert_eq!(tiny().validate(), Ok(()));
 
     let mut t = tiny();
@@ -55,7 +55,12 @@ fn validate_reports_each_kind_of_error() {
     t.operators[0].pre[0].var = 2;
     let fact = Fact::new(2, 0);
     assert_eq!(t.validate(), Err(TaskError::UnknownVariable { fact }));
+}
 
+/// `validate` reports duplicate effects and contradictory preconditions and
+/// goals, but accepts conditional effects on one variable.
+#[test]
+fn validate_reports_operator_and_goal_errors() {
     let mut t = tiny();
     t.operators[0].eff[1] = Effect::new(Fact::new(0, 0));
     assert_eq!(
@@ -71,7 +76,7 @@ fn validate_reports_each_kind_of_error() {
     );
     // A contradictory operator is never applicable, also in projections.
     let p = Projection::new(&t, vec![0]);
-    assert!(p.lts().transitions.is_empty());
+    assert_eq!(p.lts().transitions, vec![]);
 
     let mut t = tiny();
     t.operators[0].pre.push(Fact::new(0, 0));
@@ -85,7 +90,12 @@ fn validate_reports_each_kind_of_error() {
         fact: Fact::new(0, 0),
     };
     assert_eq!(t.validate(), Ok(()));
+}
 
+/// `validate` accepts `tiny_derived` and reports operators that set derived
+/// variables and axioms that break the layering.
+#[test]
+fn validate_reports_axiom_errors() {
     assert_eq!(tiny_derived().validate(), Ok(()));
 
     let mut t = tiny_derived();
@@ -125,6 +135,7 @@ fn validate_reports_each_kind_of_error() {
     assert_eq!(t.validate(), Ok(()));
 }
 
+/// Effect conditions are evaluated in the state before the operator, not after its other effects.
 #[test]
 fn conditional_effects_read_the_state_before_the_operator() {
     let mut t = tiny();
@@ -136,6 +147,7 @@ fn conditional_effects_read_the_state_before_the_operator() {
     assert_eq!(t.validate_plan(&[0]), None);
 }
 
+/// `apply` and `validate_plan` re-evaluate derived variables after every operator.
 #[test]
 fn axioms_are_evaluated_after_each_operator() {
     let t = tiny_derived();
@@ -175,6 +187,7 @@ fn axioms_are_evaluated_after_each_operator() {
     assert_eq!(t.apply(0, &t.initial), State(vec![1, 1, 1]));
 }
 
+/// Preconditions, effect conditions and axiom conditions all become causal-graph arcs.
 #[test]
 fn causal_graph_links_conditions_to_effects() {
     let mut t = tiny_derived();
@@ -247,7 +260,7 @@ fn projections_handle_many_uncertain_effects() {
     let eff = (0..n)
         .map(|i| Effect {
             conditions: vec![Fact::new(i + 1, 1)],
-            fact: Fact::new(0, 1 + (i % 2) as u32),
+            fact: Fact::new(0, 1 + u32::try_from(i % 2).unwrap()),
         })
         .collect();
     let task = Task {
@@ -277,6 +290,7 @@ fn projections_handle_many_uncertain_effects() {
     assert_eq!(p.lts().transitions.len(), 7);
 }
 
+/// `init_distances` follows transitions from the initial state, not backwards to the goal.
 #[test]
 fn init_distances_follow_transitions_forward() {
     let t = |src, label, dst| Transition { src, label, dst };
@@ -297,6 +311,7 @@ fn init_distances_follow_transitions_forward() {
     );
 }
 
+/// A path through a `u64::MAX` cost saturates instead of wrapping to a short distance.
 #[test]
 fn distances_saturate_instead_of_wrapping() {
     let t = |src, label, dst| Transition { src, label, dst };
@@ -310,6 +325,7 @@ fn distances_saturate_instead_of_wrapping() {
     assert_eq!(lts.goal_distances(&[1, u64::MAX])[0], Some(u64::MAX));
 }
 
+/// `Rng::range` accepts the full `u64` range and single-value ranges.
 #[test]
 fn rng_range_covers_the_full_domain() {
     let mut rng = Rng::new(1);
@@ -317,6 +333,7 @@ fn rng_range_covers_the_full_domain() {
     assert_eq!(rng.range(7, 7), 7);
 }
 
+/// `Rng::range` panics on `lo > hi`.
 #[test]
 #[should_panic(expected = "empty range")]
 fn rng_range_rejects_empty_ranges() {

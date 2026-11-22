@@ -1,2 +1,5 @@
 target/
 .task/
+lcov.info
+# Not tracked: local builds resolve sibling crates through a [patch.crates-io] hub file.
+Cargo.lock

@@ -25,22 +25,34 @@ use crate::{Axiom, Effect, Fact, OpId, Operator, State, Task, Value, VarId, Vari
 /// The only file version this module understands (Fast Downward ≥ 20.06).
 pub const SAS_FILE_VERSION: u32 = 3;
 
+/// An `output.sas` file, section by section.
+///
+/// Parse it with [`SasFile::parse`] or [`str::parse`]; its [`Display`](fmt::Display)
+/// writes it back byte for byte.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SasFile {
     /// `false` means unit costs: every operator costs 1 whatever its cost field says.
     pub use_metric: bool,
+    /// The variables, indexed by [`VarId`].
     pub variables: Vec<SasVariable>,
+    /// Groups of facts of which at most one holds in any reachable state.
     pub mutex_groups: Vec<Vec<Fact>>,
+    /// The initial value of each variable; for derived variables, the default.
     pub initial: Vec<Value>,
+    /// The goal, a partial state.
     pub goal: Vec<Fact>,
+    /// The operators, indexed by [`OpId`].
     pub operators: Vec<SasOperator>,
+    /// The axiom rules.
     pub axioms: Vec<SasAxiom>,
 }
 
+/// A variable section (`begin_variable` ... `end_variable`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SasVariable {
+    /// The translator's name, e.g. `var3`.
     pub name: String,
     /// `None` for ordinary state variables, `Some(layer)` for derived variables.
     pub axiom_layer: Option<u32>,
@@ -48,6 +60,7 @@ pub struct SasVariable {
     pub values: Vec<String>,
 }
 
+/// An operator section (`begin_operator` ... `end_operator`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SasOperator {
@@ -55,31 +68,39 @@ pub struct SasOperator {
     pub name: String,
     /// Preconditions on variables the operator does not change.
     pub prevail: Vec<Fact>,
+    /// The effects, in file order.
     pub effects: Vec<SasEffect>,
     /// The cost field as written; see [`SasFile::operator_cost`].
     pub cost: u32,
 }
 
+/// One effect line of an operator: `<#conds> [<var> <val>]* <var> <pre> <post>`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SasEffect {
     /// Effect conditions; non-empty only for conditional effects.
     pub conditions: Vec<Fact>,
+    /// The variable the effect sets.
     pub var: VarId,
     /// Required value before the effect (`None` = no precondition, written `-1`).
     pub pre: Option<Value>,
+    /// The value the effect sets.
     pub post: Value,
 }
 
+/// An axiom rule section (`begin_rule` ... `end_rule`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SasAxiom {
+    /// The facts that must all hold for the rule to fire.
     pub conditions: Vec<Fact>,
+    /// The derived variable the rule sets.
     pub var: VarId,
     /// Must equal the derived variable's value in [`SasFile::initial`] (its
     /// default); the reader rejects files where it does not, and
     /// [`SasFile::to_task`] drops it.
     pub pre: Value,
+    /// The value the rule derives.
     pub post: Value,
 }
 
@@ -87,7 +108,10 @@ pub struct SasAxiom {
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ParseError {
+    /// The 1-based line number; one past the last line for an unexpected
+    /// end of file.
     pub line: usize,
+    /// What was wrong, e.g. ``expected `end_goal`, found `3 0` ``.
     pub message: String,
 }
 
@@ -100,11 +124,25 @@ impl fmt::Display for ParseError {
 impl core::error::Error for ParseError {}
 
 impl SasFile {
+    /// Parses the text of an `output.sas` file. Lines may end in `\n` or
+    /// `\r\n`; trailing blank lines are allowed.
+    ///
+    /// # Errors
+    ///
+    /// A [`ParseError`] with the line of the first problem: a syntax error, a
+    /// file version other than [`SAS_FILE_VERSION`], a variable or value out
+    /// of range, an axiom that sets a state variable or whose `pre` value
+    /// differs from the variable's default, or content after the last axiom.
     pub fn parse(text: &str) -> Result<Self, ParseError> {
         Parser::new(text).file()
     }
 
     /// The cost search should use for operator `op`.
+    ///
+    /// # Panics
+    ///
+    /// If `op` is not an operator of the file.
+    #[must_use]
     pub fn operator_cost(&self, op: OpId) -> u32 {
         if self.use_metric {
             self.operators[op].cost
@@ -114,6 +152,11 @@ impl SasFile {
     }
 
     /// The name of a fact, e.g. `Atom at(ball1, rooma)`.
+    ///
+    /// # Panics
+    ///
+    /// If `fact` is outside the file's variables or their values.
+    #[must_use]
     pub fn fact_name(&self, fact: Fact) -> &str {
         &self.variables[fact.var].values[fact.value as usize]
     }
@@ -121,6 +164,12 @@ impl SasFile {
     /// Converts to a [`Task`]. Prevail conditions and effect preconditions
     /// become operator preconditions; costs follow the metric. Mutex groups
     /// and fact names are not part of a task and stay here.
+    ///
+    /// # Panics
+    ///
+    /// If a variable has more than `u32::MAX` values; a parsed file never
+    /// does.
+    #[must_use]
     pub fn to_task(&self) -> Task {
         let operators = self
             .operators
@@ -150,13 +199,15 @@ impl SasFile {
                 }
             })
             .collect();
+
         Task {
             variables: self
                 .variables
                 .iter()
                 .map(|v| Variable {
                     name: v.name.clone(),
-                    domain_size: v.values.len() as u32,
+                    domain_size: u32::try_from(v.values.len())
+                        .expect("a variable has at most u32::MAX values"),
                     axiom_layer: v.axiom_layer,
                 })
                 .collect(),
@@ -177,11 +228,17 @@ impl SasFile {
 
     /// Formats a plan the way Fast Downward writes `sas_plan`, for use with
     /// plan validators such as VAL.
+    ///
+    /// # Panics
+    ///
+    /// If `plan` names an operator the file does not have.
+    #[must_use]
     pub fn format_plan(&self, plan: &[OpId]) -> String {
         let mut out = String::new();
         for &op in plan {
             let _ = writeln!(out, "({})", self.operators[op].name);
         }
+
         let cost: u64 = plan
             .iter()
             .map(|&op| u64::from(self.operator_cost(op)))
@@ -196,6 +253,7 @@ impl SasFile {
 
 impl FromStr for SasFile {
     type Err = ParseError;
+
     fn from_str(s: &str) -> Result<Self, ParseError> {
         Self::parse(s)
     }
@@ -252,20 +310,25 @@ impl fmt::Display for SasFile {
     }
 }
 
+/// Writes one `<var> <value>` line per fact.
 fn write_facts(f: &mut fmt::Formatter<'_>, facts: &[Fact]) -> fmt::Result {
     facts
         .iter()
         .try_for_each(|x| writeln!(f, "{} {}", x.var, x.value))
 }
 
+/// A line-by-line reader of `output.sas`, tracking the line number for errors.
 struct Parser<'a> {
+    /// The lines not read yet.
     lines: core::str::Lines<'a>,
+    /// The 1-based number of the line read last; 0 before the first.
     line: usize,
     /// Domain sizes of the variables read so far, for range checks.
     domains: Vec<u32>,
 }
 
 impl<'a> Parser<'a> {
+    /// A parser at the start of `text`.
     fn new(text: &'a str) -> Self {
         Self {
             lines: text.lines(),
@@ -274,6 +337,7 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// An error at the current line.
     fn error<T>(&self, message: impl Into<String>) -> Result<T, ParseError> {
         Err(ParseError {
             line: self.line,
@@ -281,6 +345,7 @@ impl<'a> Parser<'a> {
         })
     }
 
+    /// The next line, without a trailing `\r`.
     fn next(&mut self) -> Result<&'a str, ParseError> {
         self.line += 1;
         match self.lines.next() {
@@ -289,6 +354,7 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Reads a line that must be `keyword` (surrounding whitespace ignored).
     fn expect(&mut self, keyword: &str) -> Result<(), ParseError> {
         let l = self.next()?;
         if l.trim() == keyword {
@@ -298,14 +364,16 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Reads a line of whitespace-separated integers.
     fn numbers(&mut self) -> Result<Vec<i64>, ParseError> {
         let l = self.next()?;
         l.split_whitespace()
-            .map(|t| t.parse::<i64>())
+            .map(str::parse::<i64>)
             .collect::<Result<_, _>>()
             .or_else(|_| self.error(format!("expected integers, found `{l}`")))
     }
 
+    /// Reads a line with a single integer that fits `T`; `what` names it in errors.
     fn number<T: TryFrom<i64>>(&mut self, what: &str) -> Result<T, ParseError> {
         match self.numbers()?.as_slice() {
             &[n] => T::try_from(n).or_else(|_| self.error(format!("{what} out of range: {n}"))),
@@ -313,6 +381,7 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Checks that `n` is a variable read so far.
     fn var(&self, n: i64) -> Result<VarId, ParseError> {
         match usize::try_from(n) {
             Ok(v) if v < self.domains.len() => Ok(v),
@@ -320,6 +389,7 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Checks that `n` is a value of `var`.
     fn value(&self, var: VarId, n: i64) -> Result<Value, ParseError> {
         match u32::try_from(n) {
             Ok(v) if v < self.domains[var] => Ok(v),
@@ -327,11 +397,13 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// The checked fact `var = value`.
     fn fact_from(&self, var: i64, value: i64) -> Result<Fact, ParseError> {
         let var = self.var(var)?;
         Ok(Fact::new(var, self.value(var, value)?))
     }
 
+    /// Reads a `<var> <value>` line.
     fn fact(&mut self) -> Result<Fact, ParseError> {
         match self.numbers()?.as_slice() {
             &[var, value] => self.fact_from(var, value),
@@ -339,52 +411,24 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Reads a count line, then that many fact lines; `what` names the count.
     fn facts(&mut self, what: &str) -> Result<Vec<Fact>, ParseError> {
         let n: usize = self.number(what)?;
         (0..n).map(|_| self.fact()).collect()
     }
 
+    /// Reads a whole file, section by section.
     fn file(mut self) -> Result<SasFile, ParseError> {
-        self.expect("begin_version")?;
-        let version: u32 = self.number("version")?;
-        if version != SAS_FILE_VERSION {
-            return self.error(format!(
-                "unsupported file version {version} (expected {SAS_FILE_VERSION})"
-            ));
-        }
-        self.expect("end_version")?;
-
-        self.expect("begin_metric")?;
-        let use_metric = match self.number::<i64>("metric")? {
-            0 => false,
-            1 => true,
-            m => return self.error(format!("metric must be 0 or 1, found {m}")),
-        };
-        self.expect("end_metric")?;
+        self.version()?;
+        let use_metric = self.metric()?;
 
         let num_vars: usize = self.number("number of variables")?;
         let variables = (0..num_vars)
             .map(|_| self.variable())
             .collect::<Result<Vec<_>, _>>()?;
 
-        let num_mutex: usize = self.number("number of mutex groups")?;
-        let mutex_groups = (0..num_mutex)
-            .map(|_| {
-                self.expect("begin_mutex_group")?;
-                let facts = self.facts("mutex group size")?;
-                self.expect("end_mutex_group")?;
-                Ok(facts)
-            })
-            .collect::<Result<_, ParseError>>()?;
-
-        self.expect("begin_state")?;
-        let initial: Vec<Value> = (0..num_vars)
-            .map(|var| {
-                let n = self.number::<i64>("initial value")?;
-                self.value(var, n)
-            })
-            .collect::<Result<_, _>>()?;
-        self.expect("end_state")?;
+        let mutex_groups = self.mutex_groups()?;
+        let initial = self.initial_state(num_vars)?;
 
         self.expect("begin_goal")?;
         let goal = self.facts("number of goal facts")?;
@@ -400,14 +444,8 @@ impl<'a> Parser<'a> {
             .map(|_| self.axiom(&variables, &initial))
             .collect::<Result<_, _>>()?;
 
-        while let Some(extra) = self.lines.next() {
-            self.line += 1;
-            if !extra.trim().is_empty() {
-                return self.error(format!(
-                    "unexpected content after the last axiom: `{extra}`"
-                ));
-            }
-        }
+        self.end_of_file()?;
+
         Ok(SasFile {
             use_metric,
             variables,
@@ -419,6 +457,75 @@ impl<'a> Parser<'a> {
         })
     }
 
+    /// Reads the version section and checks it is [`SAS_FILE_VERSION`].
+    fn version(&mut self) -> Result<(), ParseError> {
+        self.expect("begin_version")?;
+        let version: u32 = self.number("version")?;
+        if version != SAS_FILE_VERSION {
+            return self.error(format!(
+                "unsupported file version {version} (expected {SAS_FILE_VERSION})"
+            ));
+        }
+
+        self.expect("end_version")
+    }
+
+    /// Reads the metric section: whether operator costs count.
+    fn metric(&mut self) -> Result<bool, ParseError> {
+        self.expect("begin_metric")?;
+        let use_metric = match self.number::<i64>("metric")? {
+            0 => false,
+            1 => true,
+            m => return self.error(format!("metric must be 0 or 1, found {m}")),
+        };
+        self.expect("end_metric")?;
+
+        Ok(use_metric)
+    }
+
+    /// Reads the mutex group count and the mutex group sections.
+    fn mutex_groups(&mut self) -> Result<Vec<Vec<Fact>>, ParseError> {
+        let num_mutex: usize = self.number("number of mutex groups")?;
+
+        (0..num_mutex)
+            .map(|_| {
+                self.expect("begin_mutex_group")?;
+                let facts = self.facts("mutex group size")?;
+                self.expect("end_mutex_group")?;
+                Ok(facts)
+            })
+            .collect()
+    }
+
+    /// Reads the initial state section, one value per variable.
+    fn initial_state(&mut self, num_vars: usize) -> Result<Vec<Value>, ParseError> {
+        self.expect("begin_state")?;
+        let initial = (0..num_vars)
+            .map(|var| {
+                let n = self.number::<i64>("initial value")?;
+                self.value(var, n)
+            })
+            .collect::<Result<_, _>>()?;
+        self.expect("end_state")?;
+
+        Ok(initial)
+    }
+
+    /// Checks that only blank lines follow the last axiom.
+    fn end_of_file(&mut self) -> Result<(), ParseError> {
+        while let Some(extra) = self.lines.next() {
+            self.line += 1;
+            if !extra.trim().is_empty() {
+                return self.error(format!(
+                    "unexpected content after the last axiom: `{extra}`"
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Reads a variable section and records its domain size.
     fn variable(&mut self) -> Result<SasVariable, ParseError> {
         self.expect("begin_variable")?;
         let name = self.next()?.to_string();
@@ -444,6 +551,7 @@ impl<'a> Parser<'a> {
         })
     }
 
+    /// Reads an operator section.
     fn operator(&mut self) -> Result<SasOperator, ParseError> {
         self.expect("begin_operator")?;
         let name = self.next()?.to_string();
@@ -493,6 +601,8 @@ impl<'a> Parser<'a> {
         })
     }
 
+    /// Reads an axiom rule section. Its variable must be derived, and its
+    /// `pre` value the variable's default in `initial`.
     fn axiom(
         &mut self,
         variables: &[SasVariable],
