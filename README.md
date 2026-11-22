@@ -2,6 +2,8 @@
 
 SAS+ / finite-domain planning tasks for Rust, **compatible with Fast Downward's translator**.
 
+Part of the [planning and search crates](https://sunsided.github.io/planning-and-search/); see also this crate's [overview page](https://sunsided.github.io/planning-and-search/crates/sas-plus/).
+
 ## What is SAS+?
 
 **SAS** stands for **Simplified Action Structures** (Bäckström & Klein, 1991). The **+** is the extension by Bäckström & Nebel (1995, *Complexity Results for SAS+ Planning*): preconditions and goals may leave variables *undefined*, so they are partial states.
